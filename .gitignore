@@ -1,3 +1,7 @@
 langgraph_env3/
 __pycache__/
 node_modules/
+.env
+frontend/.env
+
+*.log
