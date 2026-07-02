@@ -23,6 +23,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 from backend.auth import get_current_user
 from backend.agents.graph import compile_app
+from backend.routes import router as profile_booking_router
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(name)s  %(message)s")
@@ -30,16 +31,39 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(name)s  %(message
 # ── Globals (set during lifespan) ────────────────────────────────────────────
 _compiled_app = None
 _db_conn = None
+_bg_tasks = []
 
+def _reminder_loop():
+    import time
+    from backend.scheduler import check_and_send_reminders
+    while True:
+        try:
+            check_and_send_reminders()
+        except Exception as exc:
+            log.error("Reminder loop error: %s", exc)
+        time.sleep(3600)
+
+def _telegram_polling_loop():
+    from backend.telegram_bot import poll_telegram_forever
+    poll_telegram_forever()
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    """Startup: compile graph + connect DB.  Shutdown: close DB connection."""
-    global _compiled_app, _db_conn
+    """Startup: compile graph + connect DB + start background tasks."""
+    global _compiled_app, _db_conn, _bg_tasks
     log.info("Starting up — compiling LangGraph pipeline…")
     _compiled_app, _db_conn = compile_app()
     log.info("Pipeline ready.")
+
+    import threading
+    t1 = threading.Thread(target=_reminder_loop, daemon=True)
+    t2 = threading.Thread(target=_telegram_polling_loop, daemon=True)
+    t1.start()
+    t2.start()
+
     yield
+
+    # Daemon threads will die automatically with the process
     if _db_conn:
         _db_conn.close()
         log.info("Database connection closed.")
@@ -64,6 +88,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Register additional routers ──────────────────────────────────────────────
+app.include_router(profile_booking_router)
 
 
 # ── Request / Response models ────────────────────────────────────────────────
@@ -146,7 +173,10 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
         }
 
     async def event_stream():
-        q: queue.Queue = queue.Queue()
+        import asyncio
+        q = asyncio.Queue()
+
+        loop = asyncio.get_running_loop()
 
         def _run_graph():
             try:
@@ -155,18 +185,20 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
                     config=config,
                     stream_mode="updates",
                 ):
-                    q.put(("chunk", chunk))
-                q.put(("done", None))
+                    # Use run_coroutine_threadsafe to put items in the async queue from this thread
+                    asyncio.run_coroutine_threadsafe(q.put(("chunk", chunk)), loop)
+                asyncio.run_coroutine_threadsafe(q.put(("done", None)), loop)
             except Exception as exc:
-                q.put(("error", str(exc)))
+                asyncio.run_coroutine_threadsafe(q.put(("error", str(exc))), loop)
 
         thread = threading.Thread(target=_run_graph, daemon=True)
         thread.start()
 
         while True:
             try:
-                kind, payload = q.get(timeout=120)
-            except queue.Empty:
+                # async timeout prevents blocking the main event loop
+                kind, payload = await asyncio.wait_for(q.get(), timeout=120.0)
+            except asyncio.TimeoutError:
                 yield {"event": "error", "data": json.dumps({"detail": "Timeout"})}
                 break
 

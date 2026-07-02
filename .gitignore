@@ -3,5 +3,9 @@ __pycache__/
 node_modules/
 .env
 frontend/.env
-
 *.log
+.vscode/
+
+documentation.txt
+update_db.py
+output.txt

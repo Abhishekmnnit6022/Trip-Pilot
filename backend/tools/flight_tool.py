@@ -12,6 +12,48 @@ log = logging.getLogger(__name__)
 
 API_URL = "http://api.aviationstack.com/v1/flights"
 
+CITY_AIRPORT_MAP = {
+    "delhi": "DEL", "new delhi": "DEL", "mumbai": "BOM", "bengaluru": "BLR", "bangalore": "BLR",
+    "chennai": "MAA", "kolkata": "CCU", "hyderabad": "HYD", "pune": "PNQ", "ahmedabad": "AMD",
+    "jaipur": "JAI", "lucknow": "LKO", "prayagraj": "IXD", "allahabad": "IXD", "varanasi": "VNS",
+    "patna": "PAT", "chandigarh": "IXC", "kochi": "COK", "cochin": "COK", "thiruvananthapuram": "TRV",
+    "trivandrum": "TRV", "guwahati": "GAU", "amritsar": "ATQ", "bhopal": "BHO", "indore": "IDR",
+    "nagpur": "NAG", "surat": "STV", "bhubaneswar": "BBI", "ranchi": "IXR", "raipur": "RPR",
+    "dehradun": "DED", "goa": "GOI", "panaji": "GOI", "agra": "AGR", "ajmer": "KQH",
+    "aurangabad": "IXU", "ayodhya": "AYJ", "bareilly": "BEK", "belagavi": "IXG", "belgaum": "IXG",
+    "bhavnagar": "BHU", "bikaner": "BKB", "coimbatore": "CJB", "darjeeling": "IXB", "bagdogra": "IXB",
+    "siliguri": "IXB", "dharamshala": "DHM", "dibrugarh": "DIB", "dimapur": "DMU", "durgapur": "RDP",
+    "gaya": "GAY", "gorakhpur": "GOP", "gwalior": "GWL", "hubli": "HBX", "jabalpur": "JLR",
+    "jaisalmer": "JSA", "jammu": "IXJ", "jamnagar": "JGA", "jamshedpur": "IXW", "jodhpur": "JDH",
+    "kanpur": "KNU", "kolhapur": "KLH", "kozhikode": "CCJ", "calicut": "CCJ", "kurnool": "KJB",
+    "leh": "IXL", "ludhiana": "LUH", "madurai": "IXM", "mangalore": "IXE", "mysore": "MYQ",
+    "nashik": "ISK", "port blair": "IXZ", "rajkot": "RAJ", "shillong": "SHL", "shimla": "SLV",
+    "srinagar": "SXR", "tiruchirappalli": "TRZ", "trichy": "TRZ", "tirupati": "TIR", "udaipur": "UDR",
+    "vadodara": "BDQ", "vijayawada": "VGA", "visakhapatnam": "VTZ", "warangal": "WGC", "kannur": "CNN",
+    "kanyakumari": "TRV", "pondicherry": "PNY", "rajahmundry": "RJA", "shirdi": "SAG", "nanded": "NDC",
+    "jalgaon": "JLG", "gondia": "GDB", "kandla": "IXY", "porbandar": "PBD", "bhuj": "BHJ", "diu": "DIU",
+    "hissar": "HSS", "kangra": "DHM", "kullu": "KUU", "manali": "KUU", "pathankot": "IXP",
+    "bathinda": "BUP", "pantnagar": "PGH", "nainital": "PGH", "haldwani": "PGH", "pithoragarh": "NNS",
+    "hazaribagh": "HZD", "bokaro": "BKR", "deoghar": "DGH", "darbhanga": "DBR", "muzaffarpur": "MZU",
+    "rajgir": "GAY", "imphal": "IMF", "agartala": "IXA", "aizawl": "AJL", "kohima": "DMU",
+    "itanagar": "HGI", "tezpur": "TEZ", "jorhat": "JRH", "lakhimpur": "IXI", "rupsi": "RUP",
+    "pakyong": "PYG", "gangtok": "PYG", "agatti": "AGX", "lakshadweep": "AGX", "mathura": "AGR",
+    "vrindavan": "AGR", "haridwar": "DED", "rishikesh": "DED", "aligarh": "AGR", "jhansi": "GWL",
+    "ujjain": "IDR", "somnath": "DIU", "dwarka": "JGA", "rameshwaram": "IXM", "ooty": "CJB",
+    "kodaikanal": "IXM", "munnar": "COK", "wayanad": "CCJ", "hampi": "VDY", "khajuraho": "HJR",
+    "puri": "BBI", "konark": "BBI", "mahabaleshwar": "PNQ", "lonavala": "PNQ"
+}
+
+def _get_iata(place: str) -> str:
+    if not place:
+        return ""
+    place_clean = place.lower().strip()
+    if place_clean in CITY_AIRPORT_MAP:
+        return CITY_AIRPORT_MAP[place_clean]
+    if len(place_clean) == 3:
+        return place_clean.upper()
+    return place.upper()
+
 
 def search_flights(
     origin: str = "",
@@ -31,9 +73,9 @@ def search_flights(
 
     params: dict = {"access_key": AVIATIONSTACK_API_KEY, "limit": 5}
     if origin:
-        params["dep_iata"] = origin.upper()
+        params["dep_iata"] = _get_iata(origin)
     if destination:
-        params["arr_iata"] = destination.upper()
+        params["arr_iata"] = _get_iata(destination)
 
     try:
         resp = requests.get(API_URL, params=params, timeout=10)

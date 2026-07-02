@@ -9,7 +9,7 @@ from backend.config import SUPABASE_URL, SUPABASE_ANON_KEY
 _supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 
-async def get_current_user(authorization: str = Header(default="")) -> dict:
+def get_current_user(authorization: str = Header(default="")) -> dict:
     """
     FastAPI dependency: extract and verify the Supabase JWT from the
     ``Authorization: Bearer <token>`` header.
@@ -28,7 +28,7 @@ async def get_current_user(authorization: str = Header(default="")) -> dict:
         user = resp.user
         if user is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-        return {"user_id": str(user.id), "email": user.email or ""}
+        return {"user_id": str(user.id), "email": user.email or "", "token": token}
     except HTTPException:
         raise
     except Exception as exc:

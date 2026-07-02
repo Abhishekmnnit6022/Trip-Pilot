@@ -23,14 +23,34 @@ RAILRADAR_API_BASE = "https://api.railradar.in/v1"
 # A city can have many stations.  These are the primary stations travellers
 # commonly mean when they enter a city rather than a specific station code.
 CITY_STATION_ALIASES = {
-    "delhi": "NDLS",
-    "goa": "MAO",
-    "mumbai": "CSMT",
-    "bengaluru": "SBC",
-    "bangalore": "SBC",
-    "chennai": "MAS",
-    "kolkata": "HWH",
-    "hyderabad": "SC",
+    "delhi": "NDLS", "new delhi": "NDLS", "mumbai": "CSMT", "bengaluru": "SBC", "bangalore": "SBC",
+    "chennai": "MAS", "kolkata": "HWH", "hyderabad": "SC", "pune": "PUNE", "ahmedabad": "ADI",
+    "jaipur": "JP", "lucknow": "LKO", "prayagraj": "PRYJ", "allahabad": "PRYJ", "varanasi": "BSB",
+    "patna": "PNBE", "chandigarh": "CDG", "kochi": "ERS", "cochin": "ERS", "thiruvananthapuram": "TVC",
+    "trivandrum": "TVC", "guwahati": "GHY", "amritsar": "ASR", "bhopal": "BPL", "indore": "INDB",
+    "nagpur": "NGP", "surat": "ST", "bhubaneswar": "BBS", "ranchi": "RNC", "raipur": "R",
+    "dehradun": "DDN", "goa": "MAO", "panaji": "MAO", "agra": "AGC", "ajmer": "AII",
+    "aurangabad": "AWB", "ayodhya": "AY", "bareilly": "BE", "belagavi": "BGM", "belgaum": "BGM",
+    "bhavnagar": "BVC", "bikaner": "BKN", "coimbatore": "CBE", "darjeeling": "NJP", "bagdogra": "NJP",
+    "siliguri": "NJP", "dharamshala": "PTK", "dibrugarh": "DBRG", "dimapur": "DMV", "durgapur": "DGR",
+    "gaya": "GAYA", "gorakhpur": "GKP", "gwalior": "GWL", "hubli": "UBL", "jabalpur": "JBP",
+    "jaisalmer": "JSM", "jammu": "JAT", "jamnagar": "JAM", "jamshedpur": "TATA", "tatanagar": "TATA",
+    "jodhpur": "JU", "kanpur": "CNB", "kolhapur": "KOP", "kozhikode": "CLT", "calicut": "CLT",
+    "kurnool": "KRNT", "leh": "UHP", "ludhiana": "LDH", "madurai": "MDU", "mangalore": "MAQ",
+    "mysore": "MYS", "nashik": "NK", "rajkot": "RJT", "shillong": "GHY", "shimla": "SML",
+    "srinagar": "SINA", "tiruchirappalli": "TPJ", "trichy": "TPJ", "tirupati": "TPTY", "udaipur": "UDZ",
+    "vadodara": "BRC", "vijayawada": "BZA", "visakhapatnam": "VSKP", "warangal": "WL", "kannur": "CAN",
+    "kanyakumari": "CAPE", "pondicherry": "PDY", "rajahmundry": "RJY", "shirdi": "SNSI", "nanded": "NED",
+    "jalgaon": "JL", "gondia": "G", "kandla": "GIMB", "porbandar": "PBR", "bhuj": "BHJU",
+    "hissar": "HSR", "kangra": "KGRA", "kullu": "KLU", "manali": "KLU", "pathankot": "PTK",
+    "bathinda": "BTI", "pantnagar": "PBW", "nainital": "KGM", "haldwani": "HDW", "pithoragarh": "PITH",
+    "hazaribagh": "HZBN", "bokaro": "BKSC", "deoghar": "DGHR", "darbhanga": "DBG", "muzaffarpur": "MFP",
+    "rajgir": "RGD", "imphal": "TSE", "agartala": "AGTL", "aizawl": "BHRB", "kohima": "DMV",
+    "itanagar": "NHLN", "tezpur": "TZTB", "jorhat": "JT", "lakhimpur": "NLP", "gangtok": "NJP",
+    "mathura": "MTJ", "vrindavan": "MTJ", "haridwar": "HW", "rishikesh": "RKSH", "aligarh": "ALJN",
+    "jhansi": "VGLJ", "ujjain": "UJN", "somnath": "SMNH", "dwarka": "DWK", "rameshwaram": "RMM",
+    "ooty": "UAM", "kodaikanal": "KQN", "munnar": "AWY", "wayanad": "CLT", "hampi": "HPT",
+    "khajuraho": "KURJ", "puri": "PURI", "konark": "PURI", "mahabaleshwar": "PUNE", "lonavala": "LNL"
 }
 
 _PARSE_PROMPT = """\
@@ -176,10 +196,10 @@ def search_trains_structured(
     Uses Tavily to fetch raw data, then LLM to parse it.
     """
     railradar_results = _search_railradar(origin, destination, date)
-    if railradar_results is not None:
+    if railradar_results:
         return railradar_results
 
-    log.info("RailRadar unavailable; falling back to Tavily train search")
+    log.info("RailRadar returned no results or is unavailable; falling back to Tavily train search")
     raw_results = tavily_train_search(origin, destination, date)
 
     if not raw_results or raw_results == "No results found.":

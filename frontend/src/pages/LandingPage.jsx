@@ -34,6 +34,9 @@ export default function LandingPage() {
             <Sparkles size={14} />
             <span>AI-Powered Multi-Agent System</span>
           </div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+            <img src="/logo.png" alt="TripPilot Logo" style={{ width: '220px', height: 'auto', objectFit: 'contain', filter: 'invert(1) hue-rotate(180deg) brightness(1.5) drop-shadow(0 0 15px rgba(59, 130, 246, 0.4))' }} />
+          </div>
           <h1>Plan Your Dream Trip<br />in Seconds</h1>
           <p className="hero-sub">
             Tell our AI where you want to go — it searches flights, trains, hotels,

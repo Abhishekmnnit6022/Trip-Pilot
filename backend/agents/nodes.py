@@ -26,6 +26,7 @@ from backend.tools.flight_tool import search_flights, format_flights_text
 from backend.tools.train_tool import search_trains_structured, format_trains_text
 from backend.tools.hotel_tool import search_hotels_structured, format_hotels_text
 from backend.tools.tavily_tool import search_attractions
+from backend.tools.weather_tool import get_weather_forecast
 
 log = logging.getLogger(__name__)
 
@@ -315,6 +316,7 @@ def itinerary_agent(state: TravelState) -> dict:
     origin = state.get("origin", "")
     num_days = state.get("num_days", 0) or 3
     start_date = state.get("start_date", "")
+    end_date = state.get("end_date", "")
     budget = state.get("budget", "")
     flights_text = format_flights_text(
         json.loads(state.get("flight_results", "[]") or "[]")
@@ -328,6 +330,10 @@ def itinerary_agent(state: TravelState) -> dict:
 
     # Get tourist attractions
     attractions = search_attractions(destination)
+
+    # Get weather forecast
+    weather_data = get_weather_forecast(destination, start_date, end_date)
+    weather_text = weather_data.get("summary", "Weather data unavailable.")
 
     prompt = f"""\
 Create a detailed {num_days}-day travel itinerary for a trip from {origin} to {destination}.
@@ -345,19 +351,24 @@ Available Hotels:
 Tourist Attractions & Things To Do:
 {attractions}
 
+Weather Forecast:
+{weather_text}
+
 Please create a day-by-day itinerary with:
 - Morning, afternoon, and evening activities
 - Suggested transport and hotel from the options above
+- Weather-appropriate activity suggestions
 - Estimated costs where possible
 - Local food recommendations
-- Practical tips
+- Practical tips based on the weather
 
 Format each day clearly with a heading like "## Day 1: [date] — [theme]"
+At the end, include a section "## 🌤️ Weather Summary" with the forecast.
 """
 
     response = llm.invoke(
         [
-            SystemMessage(content="You are an expert travel planner who creates detailed, practical itineraries."),
+            SystemMessage(content="You are an expert travel planner who creates detailed, practical itineraries. Factor in weather conditions for activity planning."),
             HumanMessage(content=prompt),
         ]
     )
@@ -374,11 +385,17 @@ Format each day clearly with a heading like "## Day 1: [date] — [theme]"
 # ─────────────────────────────────────────────────────────────────────────────
 
 def final_agent(state: TravelState) -> dict:
-    """Generate the complete final trip summary."""
+    """Generate the complete final trip summary with packing checklist."""
     itinerary = state.get("itinerary", "")
     destination = state.get("destination", "")
     origin = state.get("origin", "")
     num_days = state.get("num_days", 0)
+    start_date = state.get("start_date", "")
+    end_date = state.get("end_date", "")
+
+    # Get weather for packing suggestions
+    weather_data = get_weather_forecast(destination, start_date, end_date)
+    weather_text = weather_data.get("summary", "Weather data unavailable.")
 
     prompt = f"""\
 Create a final, comprehensive travel plan summary for a {num_days}-day trip
@@ -387,10 +404,18 @@ from {origin} to {destination}.
 Itinerary:
 {itinerary}
 
+Weather Forecast:
+{weather_text}
+
 Please provide:
 1. A brief trip overview
 2. The complete itinerary (reformatted neatly)
-3. Packing suggestions
+3. 🧳 **Packing Checklist** — a detailed, weather-appropriate packing list organized by category:
+   - Clothing (based on weather forecast)
+   - Toiletries & Health
+   - Electronics & Documents
+   - Travel Essentials
+   - Destination-specific items (e.g., temple visit clothes, beach gear, trekking shoes)
 4. Important travel tips
 5. Emergency contacts / useful info for {destination}
 
@@ -399,7 +424,7 @@ Keep it well-organized with clear headings and bullet points.
 
     response = llm.invoke(
         [
-            SystemMessage(content="You are an expert travel planner creating a final trip document."),
+            SystemMessage(content="You are an expert travel planner creating a final trip document with weather-aware packing suggestions."),
             HumanMessage(content=prompt),
         ]
     )

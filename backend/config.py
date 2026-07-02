@@ -1,5 +1,9 @@
 """
 Centralized configuration — loads all environment variables once.
+
+This module is imported by every backend module that needs access to
+API keys, database URLs, or service credentials. It reads from the
+project-root .env file using python-dotenv.
 """
 
 import os
@@ -16,11 +20,16 @@ AVIATIONSTACK_API_KEY: str = os.getenv("AVIATIONSTACK_API_KEY", "").strip()
 TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", "").strip()
 RAPIDAPI_KEY: str = os.getenv("RAPIDAPI", "").strip()
 RAILRADAR_API_KEY: str = os.getenv("RAILRADAR_API_KEY", "").strip()
+FAST2SMS_API_KEY: str = os.getenv("FAST2SMSAPIKEY", "").strip()
 
 # ── Supabase ─────────────────────────────────────────────────────────────────
 SUPABASE_URL: str = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "").strip()
 SUPABASE_DB_URL: str = os.getenv("SUPABASE_DB_URL", "").strip()
 
+# ── Telegram ─────────────────────────────────────────────────────────────────
+TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+
 # ── LLM ──────────────────────────────────────────────────────────────────────
 LLM_MODEL: str = "llama-3.3-70b-versatile"
+
