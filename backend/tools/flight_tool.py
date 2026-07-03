@@ -61,15 +61,23 @@ def search_flights(
     date: str = "",
 ) -> list[dict]:
     """
-    Search flights via AviationStack.
+    Search flights via AviationStack, with Circuit Breaker fallback to Tavily.
 
     Returns a list of dicts, each containing:
         airline, flight_number, departure_airport, departure_time,
         arrival_airport, arrival_time, status, booking_url
     """
+    from backend.circuit_breaker import aviation_breaker
+
     if not AVIATIONSTACK_API_KEY:
         log.warning("AviationStack API key not configured")
-        return []
+        return _flight_fallback_tavily(origin, destination, date)
+
+    # Circuit Breaker: if OPEN, skip the API entirely
+    if not aviation_breaker.allow_request():
+        log.warning("[CircuitBreaker] AviationStack circuit is OPEN — using Tavily fallback")
+        aviation_breaker.record_fallback()
+        return _flight_fallback_tavily(origin, destination, date)
 
     params: dict = {"access_key": AVIATIONSTACK_API_KEY, "limit": 5}
     if origin:
@@ -81,9 +89,11 @@ def search_flights(
         resp = requests.get(API_URL, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
+        aviation_breaker.record_success()
     except Exception as exc:
         log.error("AviationStack request failed: %s", exc)
-        return []
+        aviation_breaker.record_failure()
+        return _flight_fallback_tavily(origin, destination, date)
 
     flights: list[dict] = []
     for flight in (data.get("data") or [])[:5]:
@@ -122,6 +132,17 @@ def search_flights(
         )
 
     return flights
+
+
+def _flight_fallback_tavily(origin: str, destination: str, date: str) -> list[dict]:
+    """Fallback: search for flights via Tavily web search when AviationStack is down."""
+    from backend.tools.tavily_tool import search_flights_web
+    log.info("[Fallback] Searching flights via Tavily: %s → %s", origin, destination)
+    try:
+        return search_flights_web(origin, destination, date)
+    except Exception as exc:
+        log.error("[Fallback] Tavily flight search also failed: %s", exc)
+        return []
 
 
 def format_flights_text(flights: list[dict]) -> str:

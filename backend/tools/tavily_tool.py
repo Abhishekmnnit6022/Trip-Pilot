@@ -70,3 +70,44 @@ def search_attractions(destination: str) -> str:
     """Search for tourist attractions and things to do."""
     query = f"top tourist places things to do in {destination} travel guide"
     return tavily_search(query, max_results=5)
+
+
+def search_flights_web(origin: str, destination: str, date: str = "") -> list[dict]:
+    """
+    Fallback flight search via Tavily web search.
+    Returns a list of dicts matching the same schema as flight_tool.search_flights().
+    Used when the AviationStack circuit breaker is OPEN.
+    """
+    from backend.tools.booking_links import get_makemytrip_flight_url
+
+    date_part = f" on {date}" if date else ""
+    query = (
+        f"flights from {origin} to {destination}{date_part} "
+        f"price schedule timing "
+        f"site:makemytrip.com OR site:goibibo.com OR site:skyscanner.co.in"
+    )
+    results = _safe_search(query, max_results=5)
+    if not results:
+        return []
+
+    booking_url = get_makemytrip_flight_url(origin, destination, date)
+
+    flights: list[dict] = []
+    for i, r in enumerate(results[:5], 1):
+        title = r.get("title", "Flight Option")
+        snippet = r.get("content", "")
+        flights.append({
+            "airline": title[:50] if title else f"Flight Option {i}",
+            "flight_number": "Web Search",
+            "departure_airport": origin,
+            "departure_iata": "",
+            "departure_time": date or "Check website",
+            "arrival_airport": destination,
+            "arrival_iata": "",
+            "arrival_time": "Check website",
+            "status": "web_search_result",
+            "booking_url": r.get("url", booking_url),
+        })
+
+    log.info("[Tavily Fallback] Found %d flight result(s) for %s → %s", len(flights), origin, destination)
+    return flights

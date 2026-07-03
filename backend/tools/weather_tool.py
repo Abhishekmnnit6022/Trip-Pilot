@@ -28,6 +28,13 @@ WMO_CODES = {
 
 def _geocode(city: str) -> tuple[float, float] | None:
     """Resolve a city name to (latitude, longitude) using Open-Meteo geocoding."""
+    from backend.circuit_breaker import weather_breaker
+
+    if not weather_breaker.allow_request():
+        log.warning("[CircuitBreaker] OpenMeteo circuit is OPEN — skipping geocode")
+        weather_breaker.record_fallback()
+        return None
+
     try:
         resp = requests.get(
             GEOCODE_URL,
@@ -37,9 +44,11 @@ def _geocode(city: str) -> tuple[float, float] | None:
         resp.raise_for_status()
         results = resp.json().get("results", [])
         if results:
+            weather_breaker.record_success()
             return results[0]["latitude"], results[0]["longitude"]
     except Exception as exc:
         log.error("Geocoding failed for %s: %s", city, exc)
+        weather_breaker.record_failure()
     return None
 
 
@@ -69,12 +78,16 @@ def get_weather_forecast(city: str, start_date: str = "", end_date: str = "") ->
     if end_date:
         params["end_date"] = end_date
 
+    from backend.circuit_breaker import weather_breaker
+
     try:
         resp = requests.get(FORECAST_URL, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
+        weather_breaker.record_success()
     except Exception as exc:
         log.error("Weather API failed for %s: %s", city, exc)
+        weather_breaker.record_failure()
         return {"city": city, "forecast_days": [], "summary": f"Weather data unavailable for {city}."}
 
     daily = data.get("daily", {})

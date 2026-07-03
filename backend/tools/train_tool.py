@@ -135,7 +135,15 @@ def _format_duration(minutes: int | None) -> str:
 
 def _search_railradar(origin: str, destination: str, date: str) -> list[dict] | None:
     """Fetch structured trains from RailRadar; None means the API was unavailable."""
+    from backend.circuit_breaker import railradar_breaker
+
     if not RAILRADAR_API_KEY:
+        return None
+
+    # Circuit Breaker: if OPEN, skip RailRadar entirely
+    if not railradar_breaker.allow_request():
+        log.warning("[CircuitBreaker] RailRadar circuit is OPEN — skipping to Tavily fallback")
+        railradar_breaker.record_fallback()
         return None
 
     try:
@@ -154,12 +162,16 @@ def _search_railradar(origin: str, destination: str, date: str) -> list[dict] | 
         response.raise_for_status()
         records = response.json().get("data", {}).get("trains", [])
         if not isinstance(records, list):
+            railradar_breaker.record_success()
             return []
+        railradar_breaker.record_success()
     except requests.RequestException as exc:
         log.error("RailRadar train search failed: %s", exc)
+        railradar_breaker.record_failure()
         return None
     except (TypeError, ValueError) as exc:
         log.error("Could not process RailRadar train data: %s", exc)
+        railradar_breaker.record_failure()
         return None
 
     booking_url = get_irctc_url()

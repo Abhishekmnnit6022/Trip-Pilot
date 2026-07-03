@@ -107,14 +107,25 @@ def _search_rapidapi(
     hotels: list[dict] = []
     items = data.get("data", {}).get("hotels", []) if isinstance(data.get("data"), dict) else []
 
-    for hotel in items[:6]:
+    for hotel in items[:15]:  # Fetch more to allow for good sorting
         prop = hotel.get("property", {})
+        
+        # Parse price safely
+        raw_price = prop.get("priceBreakdown", {}).get("grossPrice", {}).get("value", "N/A")
+        price = raw_price if isinstance(raw_price, (int, float)) else float('inf')
+        
+        # Parse rating safely
+        raw_rating = prop.get("reviewScore", 0)
+        rating = float(raw_rating) if str(raw_rating).replace('.', '', 1).isdigit() else 0.0
+
         hotels.append(
             {
                 "name": prop.get("name", "Unknown Hotel"),
-                "rating": prop.get("reviewScore", "N/A"),
+                "rating": raw_rating if raw_rating else "N/A",
+                "rating_num": rating,
                 "rating_word": prop.get("reviewScoreWord", ""),
-                "price": prop.get("priceBreakdown", {}).get("grossPrice", {}).get("value", "N/A"),
+                "price": raw_price,
+                "sort_price": price,
                 "currency": prop.get("priceBreakdown", {}).get("grossPrice", {}).get("currency", "INR"),
                 "photo_url": prop.get("photoUrls", [""])[0] if prop.get("photoUrls") else "",
                 "checkin": checkin,
@@ -122,8 +133,16 @@ def _search_rapidapi(
                 "booking_url": get_booking_hotel_url(destination, checkin, checkout),
             }
         )
+        
+    # Sort by Price (Cheaper first), then by Rating (Best first)
+    hotels.sort(key=lambda x: (x["sort_price"], -x["rating_num"]))
+    
+    # Clean up temporary sort keys and limit to top 6
+    for h in hotels:
+        h.pop("sort_price", None)
+        h.pop("rating_num", None)
 
-    return hotels
+    return hotels[:6]
 
 
 _PARSE_PROMPT = """\
