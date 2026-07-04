@@ -410,12 +410,7 @@ Weather Forecast:
 Please provide:
 1. A brief trip overview
 2. The complete itinerary (reformatted neatly)
-3. 🧳 **Packing Checklist** — a detailed, weather-appropriate packing list organized by category:
-   - Clothing (based on weather forecast)
-   - Toiletries & Health
-   - Electronics & Documents
-   - Travel Essentials
-   - Destination-specific items (e.g., temple visit clothes, beach gear, trekking shoes)
+3. 🧳 **Compact Packing Checklist** — A very short, COMPACT, weather-appropriate packing list. Only include the most essential 5-10 items. DO NOT provide long detailed categories. Keep it brief.
 4. Important travel tips
 5. Emergency contacts / useful info for {destination}
 
@@ -434,3 +429,223 @@ Keep it well-organized with clear headings and bullet points.
         "phase": "complete",
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. BUDGET CHECK NODE  (Cost Estimation)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_COST_EXTRACT_PROMPT = """\
+You are a financial analyst. Given a travel itinerary, extract the TOTAL
+estimated trip cost in Indian Rupees (INR).
+
+Rules:
+1. Sum up ALL costs: transport (flights/trains), hotels, food, activities, misc.
+2. If exact prices are not listed, estimate reasonable prices for India.
+3. Return ONLY a JSON object: {{"total_cost_inr": <integer>}}
+4. No markdown, no explanation, just the JSON.
+
+Example: {{"total_cost_inr": 18500}}
+"""
+
+
+def budget_check_node(state: TravelState) -> dict:
+    """
+    Extract total estimated cost from the itinerary using the LLM.
+    
+    This is a lightweight node that sits between itinerary_agent and
+    the conditional budget routing edge. It uses the LLM to parse
+    the generated itinerary and estimate the total trip cost in INR.
+    
+    The extracted cost is stored in `total_estimated_cost` for the
+    routing function to compare against `budget_limit`.
+    """
+    itinerary = state.get("itinerary", "")
+    budget = state.get("budget", "")
+    budget_limit = state.get("budget_limit", 0)
+
+    # If no budget was specified, skip cost check entirely
+    if not budget_limit and not budget:
+        log.info("[BudgetCheck] No budget specified — skipping cost estimation")
+        return {
+            "total_estimated_cost": 0,
+            "llm_calls": state.get("llm_calls", 0),
+        }
+
+    # If budget is a text string but budget_limit hasn't been parsed yet,
+    # try to extract the numeric value
+    if budget and not budget_limit:
+        budget_limit = _parse_budget_to_inr(budget)
+        log.info("[BudgetCheck] Parsed budget '%s' → ₹%d", budget, budget_limit)
+
+    # Ask LLM to extract cost from itinerary
+    try:
+        response = llm.invoke([
+            SystemMessage(content=_COST_EXTRACT_PROMPT),
+            HumanMessage(content=f"Extract the total cost from this itinerary:\n\n{itinerary}"),
+        ])
+        parsed = json.loads(response.content)
+        total_cost = int(parsed.get("total_cost_inr", 0))
+    except (json.JSONDecodeError, ValueError, TypeError) as exc:
+        log.warning("[BudgetCheck] Could not parse cost from LLM: %s", exc)
+        total_cost = 0
+
+    log.info(
+        "[BudgetCheck] Estimated cost: ₹%d | Budget limit: ₹%d | Optimization #%d",
+        total_cost, budget_limit, state.get("optimization_count", 0),
+    )
+
+    return {
+        "total_estimated_cost": total_cost,
+        "budget_limit": budget_limit,
+        "messages": [
+            AIMessage(content=f"💰 Estimated trip cost: ₹{total_cost:,}")
+        ],
+        "llm_calls": state.get("llm_calls", 0) + 1,
+    }
+
+
+def _parse_budget_to_inr(budget_str: str) -> int:
+    """
+    Parse a human-readable budget string into an integer INR value.
+    
+    Handles formats like: "₹15000", "15000", "15k", "15,000", "budget", "luxury"
+    """
+    import re
+    text = budget_str.lower().strip().replace(",", "").replace("₹", "").replace("rs", "").replace("inr", "")
+
+    # Predefined budget tiers
+    BUDGET_TIERS = {
+        "budget": 10000,
+        "cheap": 8000,
+        "economy": 12000,
+        "moderate": 20000,
+        "mid-range": 25000,
+        "luxury": 50000,
+        "premium": 75000,
+        "flexible": 0,
+    }
+    for keyword, amount in BUDGET_TIERS.items():
+        if keyword in text:
+            return amount
+
+    # Try to extract number
+    match = re.search(r"(\d+)\s*k", text)
+    if match:
+        return int(match.group(1)) * 1000
+
+    match = re.search(r"(\d+)", text)
+    if match:
+        return int(match.group(1))
+
+    return 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 10. BUDGET OPTIMIZER NODE  (Autonomous Cost Reduction)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_OPTIMIZER_PROMPT = """\
+You are an expert budget travel optimizer. The user's trip costs ₹{total_cost}
+but their budget is only ₹{budget_limit}.
+
+You need to reduce the cost by ₹{overshoot}.
+
+Current itinerary:
+{itinerary}
+
+Available transport data:
+Flights: {flights}
+Trains: {trains}
+Hotels: {hotels}
+
+OPTIMIZATION STRATEGIES (apply in order):
+1. Replace flights with trains (saves 40-60%)
+2. Replace luxury/5-star hotels with budget/3-star hotels (saves 50-70%)
+3. Suggest cheaper dining options (local dhabas vs restaurants)
+4. Recommend free/low-cost tourist activities over paid ones
+5. Optimize travel dates if flexibility exists
+
+Respond with ONLY valid JSON (no markdown):
+{{
+    "optimized_itinerary": "<complete re-written itinerary with cheaper options>",
+    "cost_savings": "<explanation of what was changed and estimated savings>",
+    "new_estimated_cost": <integer in INR>,
+    "changes_made": ["<change 1>", "<change 2>", ...]
+}}
+"""
+
+
+def budget_optimizer_node(state: TravelState) -> dict:
+    """
+    Autonomously optimize the trip to fit within the user's budget.
+    
+    This node is triggered when the budget_check_node determines that
+    total_estimated_cost > budget_limit. It instructs the LLM to find
+    cheaper alternatives (swap flights for trains, 5-star for 3-star, etc.)
+    and generates a new optimized itinerary.
+    
+    The optimization_count is incremented to prevent infinite loops (max 2).
+    After optimization, the pipeline re-enters the itinerary flow.
+    """
+    total_cost = state.get("total_estimated_cost", 0)
+    budget_limit = state.get("budget_limit", 0)
+    overshoot = total_cost - budget_limit
+    itinerary = state.get("itinerary", "")
+    optimization_count = state.get("optimization_count", 0)
+    flights_text = state.get("flight_results", "[]")
+    trains_text = state.get("train_results", "[]")
+    hotels_text = state.get("hotel_results", "[]")
+
+    log.info(
+        "[BudgetOptimizer] Optimizing trip (attempt #%d): ₹%d → ₹%d (overshoot: ₹%d)",
+        optimization_count + 1, total_cost, budget_limit, overshoot,
+    )
+
+    prompt = _OPTIMIZER_PROMPT.format(
+        total_cost=f"{total_cost:,}",
+        budget_limit=f"{budget_limit:,}",
+        overshoot=f"{overshoot:,}",
+        itinerary=itinerary,
+        flights=flights_text,
+        trains=trains_text,
+        hotels=hotels_text,
+    )
+
+    try:
+        response = llm.invoke([
+            SystemMessage(content="You are an expert budget travel optimizer. Your job is to reduce trip costs while maintaining a great travel experience."),
+            HumanMessage(content=prompt),
+        ])
+        parsed = json.loads(response.content)
+        optimized_itinerary = parsed.get("optimized_itinerary", itinerary)
+        new_cost = int(parsed.get("new_estimated_cost", total_cost))
+        changes = parsed.get("changes_made", [])
+        savings_text = parsed.get("cost_savings", "")
+    except (json.JSONDecodeError, ValueError, TypeError) as exc:
+        log.warning("[BudgetOptimizer] Could not parse optimizer response: %s", exc)
+        optimized_itinerary = itinerary
+        new_cost = total_cost
+        changes = []
+        savings_text = ""
+
+    # Build user-facing message
+    changes_str = "\n".join(f"  • {c}" for c in changes) if changes else "  • Minor adjustments made"
+    msg = (
+        f"🔄 **Budget Optimization (Round {optimization_count + 1})**\n\n"
+        f"💸 Previous cost: ₹{total_cost:,}\n"
+        f"🎯 Target budget: ₹{budget_limit:,}\n"
+        f"✅ New estimated cost: ₹{new_cost:,}\n\n"
+        f"**Changes made:**\n{changes_str}"
+    )
+    if savings_text:
+        msg += f"\n\n📝 {savings_text}"
+
+    return {
+        "itinerary": optimized_itinerary,
+        "total_estimated_cost": new_cost,
+        "optimization_count": optimization_count + 1,
+        "messages": [AIMessage(content=msg)],
+        "llm_calls": state.get("llm_calls", 0) + 1,
+    }
+

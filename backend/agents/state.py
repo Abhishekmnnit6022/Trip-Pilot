@@ -12,23 +12,26 @@ class TravelState(TypedDict):
     Shared state passed through every node in the LangGraph pipeline.
 
     Fields accumulated across conversation turns (via checkpointer):
-    - messages:          Full conversation history (appended via operator.add)
-    - user_query:        The latest user message text
-    - origin:            Traveler's departure city
-    - destination:       Destination city
-    - start_date:        Trip start date (YYYY-MM-DD)
-    - end_date:          Trip end date (YYYY-MM-DD)
-    - num_days:          Number of trip days
-    - budget:            Budget description
-    - travel_mode:       "flight" | "train" | "both"
-    - flight_results:    JSON string — list of flight dicts
-    - train_results:     JSON string — list of train dicts
-    - hotel_results:     JSON string — list of hotel dicts
-    - return_results:    JSON string — list of return-transport dicts
-    - itinerary:         Generated itinerary text
-    - phase:             Current pipeline phase
-    - needs_input:       What info is still missing (empty = ready to proceed)
-    - llm_calls:         Counter of LLM invocations
+    - messages:              Full conversation history (appended via operator.add)
+    - user_query:            The latest user message text
+    - origin:                Traveler's departure city
+    - destination:           Destination city
+    - start_date:            Trip start date (YYYY-MM-DD)
+    - end_date:              Trip end date (YYYY-MM-DD)
+    - num_days:              Number of trip days
+    - budget:                Budget description (e.g., "₹15000" or "budget")
+    - travel_mode:           "flight" | "train" | "both"
+    - flight_results:        JSON string — list of flight dicts
+    - train_results:         JSON string — list of train dicts
+    - hotel_results:         JSON string — list of hotel dicts
+    - return_results:        JSON string — list of return-transport dicts
+    - itinerary:             Generated itinerary text
+    - phase:                 Current pipeline phase
+    - needs_input:           What info is still missing (empty = ready to proceed)
+    - llm_calls:             Counter of LLM invocations
+    - total_estimated_cost:  LLM-extracted total trip cost in INR (0 = not yet estimated)
+    - budget_limit:          Numeric budget cap in INR (0 = no limit / flexible)
+    - optimization_count:    Number of budget optimization loops completed (max 2)
     """
 
     messages: Annotated[list[AnyMessage], operator.add]
@@ -48,3 +51,6 @@ class TravelState(TypedDict):
     phase: str
     needs_input: str
     llm_calls: int
+    total_estimated_cost: int    # Budget optimizer: estimated total cost in INR
+    budget_limit: int            # Budget optimizer: user's max budget in INR
+    optimization_count: int      # Budget optimizer: loop counter (max 2)
