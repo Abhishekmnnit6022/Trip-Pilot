@@ -30,6 +30,9 @@ SUPABASE_DB_URL: str = os.getenv("SUPABASE_DB_URL", "").strip()
 # ── Telegram ─────────────────────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 
+# ── Stripe (Test Mode — free, no credit card needed) ─────────────────────────
+STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", "").strip()
+
 # ── LLM ──────────────────────────────────────────────────────────────────────
 LLM_MODEL: str = "llama-3.3-70b-versatile"
 

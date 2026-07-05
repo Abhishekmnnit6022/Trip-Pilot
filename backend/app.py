@@ -118,6 +118,57 @@ async def new_session(user: dict = Depends(get_current_user)):
     return NewSessionResponse(thread_id=thread_id)
 
 
+@app.get("/api/chat/history/{thread_id}")
+async def get_chat_history(thread_id: str, user: dict = Depends(get_current_user)):
+    """
+    Retrieve the current state of a thread to repopulate the chat UI.
+    """
+    if not _compiled_app:
+        raise HTTPException(status_code=503, detail="Pipeline not ready")
+    
+    # Simple security check: thread_id should start with user_id
+    if not thread_id.startswith(user["user_id"]):
+        raise HTTPException(status_code=403, detail="Unauthorized thread access")
+
+    config = {"configurable": {"thread_id": thread_id}}
+    try:
+        state = _compiled_app.get_state(config)
+        vals = state.values
+        if not vals:
+            return {"messages": [], "results": {}, "itinerary": ""}
+
+        # Extract only AI/Human messages for the chat bubble UI
+        chat_msgs = []
+        for m in vals.get("messages", []):
+            if isinstance(m, HumanMessage):
+                chat_msgs.append({"role": "user", "content": m.content})
+            elif isinstance(m, AIMessage) and m.content:
+                chat_msgs.append({"role": "assistant", "content": m.content})
+
+        # Extract structured results
+        results = {}
+        for key, evt_type in [
+            ("flight_results", "flights"),
+            ("train_results", "trains"),
+            ("hotel_results", "hotels"),
+            ("return_results", "return_transport"),
+        ]:
+            if vals.get(key):
+                try:
+                    results[evt_type] = json.loads(vals[key])
+                except Exception:
+                    pass
+
+        return {
+            "messages": chat_msgs,
+            "results": results,
+            "itinerary": vals.get("itinerary", "")
+        }
+    except Exception as e:
+        log.error("Failed to load history: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to load chat history")
+
+
 @app.post("/api/chat")
 async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
     """
@@ -147,6 +198,21 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
         is_first = True
 
     if is_first:
+        # Create a chat session in the database
+        try:
+            from backend.routes import get_user_client
+            client = get_user_client(user["token"])
+            title = req.message.strip()
+            if len(title) > 40:
+                title = title[:37] + "..."
+            client.table("chat_sessions").insert({
+                "user_id": user["user_id"],
+                "thread_id": thread_id,
+                "title": title
+            }).execute()
+        except Exception as e:
+            log.warning("Failed to save chat session to database: %s", e)
+
         input_state = {
             "messages": [HumanMessage(content=req.message)],
             "user_query": req.message,
@@ -165,6 +231,9 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
             "phase": "intake",
             "needs_input": "",
             "llm_calls": 0,
+            "total_estimated_cost": 0,
+            "budget_limit": 0,
+            "optimization_count": 0,
         }
     else:
         input_state = {

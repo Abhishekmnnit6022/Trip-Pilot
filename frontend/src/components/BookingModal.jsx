@@ -54,14 +54,22 @@ export default function BookingModal({ isOpen, onClose, bookingData, onBooked })
   const [paymentMethod, setPaymentMethod] = useState('upi'); // upi | card
   const [pnr, setPnr] = useState('');               // PNR after booking
   const [error, setError] = useState('');
+  const [paymentIntentId, setPaymentIntentId] = useState('');  // Stripe PI ID
+  const [transactionId, setTransactionId] = useState('');      // Stripe txn ID
+  const [receiptUrl, setReceiptUrl] = useState('');            // Stripe receipt URL
+  const [travelDate, setTravelDate] = useState('');
 
   /* Reset wizard state every time the modal opens */
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && bookingData) {
+      setTravelDate(bookingData.travelDate || '');
       setStep(0);
       setPnr('');
       setError('');
       setPaymentMethod('upi');
+      setPaymentIntentId('');
+      setTransactionId('');
+      setReceiptUrl('');
       fetchProfile();
     }
   }, [isOpen]);
@@ -90,44 +98,79 @@ export default function BookingModal({ isOpen, onClose, bookingData, onBooked })
   };
 
   /**
-   * Simulate the payment + create the booking in the database.
-   * Shows a realistic 2-second processing delay before confirming.
+   * Process payment via Stripe → then create the booking in the database.
+   * Flow: create-intent → confirm → book → Telegram notification.
    */
   const handlePayment = async () => {
     setProcessing(true);
     setError('');
 
-    // Simulate payment processing delay (1.5–2.5s)
-    await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1000));
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { setError('Session expired. Please log in again.'); setProcessing(false); return; }
 
-      const resp = await fetch(`${API_URL}/api/book`, {
+      const headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      };
+
+      // ── Step A: Create Stripe PaymentIntent ──
+      const priceNum = parseInt(getPrice().replace(/[^\d]/g, ''), 10) || 4899;
+      const intentResp = await fetch(`${API_URL}/api/payment/create-intent`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
+        headers,
         body: JSON.stringify({
+          amount_inr: priceNum,
           booking_type: bookingData.bookingType,
           provider_name: bookingData.providerName,
-          travel_date: bookingData.travelDate,
-          details: bookingData.details,
+          description: `TripPilot ${bookingData.bookingType} booking - ${bookingData.providerName}`,
         }),
       });
 
-      if (resp.ok) {
-        const data = await resp.json();
+      if (!intentResp.ok) { setError('Failed to initialize payment. Try again.'); setProcessing(false); return; }
+      const intentData = await intentResp.json();
+      setPaymentIntentId(intentData.payment_intent_id);
+
+      // ── Step B: Confirm the payment (Stripe test card auto-charge) ──
+      const confirmResp = await fetch(`${API_URL}/api/payment/confirm`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ payment_intent_id: intentData.payment_intent_id }),
+      });
+
+      if (!confirmResp.ok) { setError('Payment declined. Please try again.'); setProcessing(false); return; }
+      const confirmData = await confirmResp.json();
+      setTransactionId(confirmData.transaction_id || confirmData.payment_intent_id);
+      setReceiptUrl(confirmData.receipt_url || '');
+
+      // ── Step C: Create the booking record in Supabase ──
+      const bookResp = await fetch(`${API_URL}/api/book`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          booking_type: bookingData.bookingType,
+          provider_name: bookingData.providerName,
+          travel_date: travelDate,
+          details: {
+            ...bookingData.details,
+            payment_intent_id: intentData.payment_intent_id,
+            transaction_id: confirmData.transaction_id,
+            payment_method: confirmData.payment_method || paymentMethod,
+            amount_paid: priceNum,
+          },
+        }),
+      });
+
+      if (bookResp.ok) {
+        const data = await bookResp.json();
         setPnr(data.pnr_or_confirmation_number);
         setStep(2); // Move to Confirmed step
         if (onBooked) onBooked(data);
       } else {
-        setError('Payment failed. Please try again.');
+        setError('Payment succeeded but booking save failed. Contact support.');
       }
     } catch (err) {
-      console.error('Booking failed:', err);
+      console.error('Payment flow failed:', err);
       setError('Network error. Please check your connection.');
     } finally {
       setProcessing(false);
@@ -184,6 +227,23 @@ export default function BookingModal({ isOpen, onClose, bookingData, onBooked })
                     <div className="booking-info-item">
                       <span className="info-label">Phone</span>
                       <span className="info-value">{profile?.phone_number || 'Not set'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Select Travel Date */}
+                <div className="booking-section">
+                  <h3><Calendar size={16} /> Travel Date</h3>
+                  <div className="booking-info-grid">
+                    <div className="booking-info-item" style={{ width: '100%' }}>
+                      <span className="info-label">Select Date</span>
+                      <input 
+                        type="date" 
+                        className="modal-input" 
+                        value={travelDate}
+                        onChange={(e) => setTravelDate(e.target.value)}
+                        style={{ marginTop: '5px', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                      />
                     </div>
                   </div>
                 </div>
@@ -342,9 +402,29 @@ export default function BookingModal({ isOpen, onClose, bookingData, onBooked })
               <span className="pnr-value">{pnr}</span>
             </div>
 
+            {transactionId && (
+              <div className="confirm-transaction">
+                <div className="txn-row">
+                  <span className="txn-label">Transaction ID</span>
+                  <span className="txn-value">{transactionId}</span>
+                </div>
+                <div className="txn-row">
+                  <span className="txn-label">Payment Status</span>
+                  <span className="txn-value txn-success">✅ Succeeded</span>
+                </div>
+                {receiptUrl && (
+                  <div className="txn-row">
+                    <span className="txn-label">Receipt</span>
+                    <a href={receiptUrl} target="_blank" rel="noopener noreferrer" className="txn-link">View Stripe Receipt →</a>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="confirm-details">
               <p>📱 A confirmation has been sent to your Telegram (if linked).</p>
               <p>📧 Check your email for the full e-ticket.</p>
+              {!transactionId && <p>💳 Payment processed via simulated gateway.</p>}
             </div>
 
             <button className="btn-primary booking-cta" onClick={onClose}>

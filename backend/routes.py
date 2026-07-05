@@ -106,6 +106,19 @@ class TelegramLinkRequest(BaseModel):
     telegram_chat_id: str
 
 
+class PaymentRequest(BaseModel):
+    """Schema for POST /api/payment/create-intent request body."""
+    amount_inr: int
+    booking_type: str
+    provider_name: str = ""
+    description: str = ""
+
+
+class PaymentConfirmRequest(BaseModel):
+    """Schema for POST /api/payment/confirm request body."""
+    payment_intent_id: str
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #   PROFILE ENDPOINTS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -386,3 +399,108 @@ def weather_forecast(city: str, start_date: str = "", end_date: str = ""):
     if not city.strip():
         raise HTTPException(status_code=400, detail="City is required")
     return get_weather_forecast(city.strip(), start_date, end_date)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#   CIRCUIT BREAKER HEALTH MONITORING
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/health/circuit-breakers")
+def circuit_breaker_status():
+    """
+    Return the live state and metrics of all circuit breakers.
+
+    This is an unauthenticated endpoint intended for DevOps monitoring.
+    Returns a dict with each API's circuit breaker state, failure counts,
+    total trips, and fallback usage.
+    """
+    from backend.circuit_breaker import (
+        aviation_breaker,
+        railradar_breaker,
+        weather_breaker,
+        hotel_breaker,
+    )
+    return {
+        "status": "ok",
+        "breakers": [
+            aviation_breaker.get_metrics(),
+            railradar_breaker.get_metrics(),
+            weather_breaker.get_metrics(),
+            hotel_breaker.get_metrics(),
+        ],
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#   STRIPE PAYMENT ENDPOINTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/payment/create-intent")
+def create_payment_intent(body: PaymentRequest, user: dict = Depends(get_current_user)):
+    """
+    Create a Stripe PaymentIntent for a booking.
+
+    This endpoint is called by the frontend BookingModal when the user
+    clicks "Pay". It creates a real Stripe PaymentIntent in Test Mode
+    (or a simulated one if Stripe is not configured).
+
+    Args:
+        body: PaymentRequest with amount_inr, booking_type, provider_name.
+
+    Returns:
+        dict with payment_intent_id, client_secret, amount, status.
+    """
+    from backend.stripe_service import create_payment_intent as stripe_create
+
+    if body.amount_inr <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
+
+    result = stripe_create(
+        amount_inr=body.amount_inr,
+        booking_type=body.booking_type,
+        user_id=user["user_id"],
+        provider_name=body.provider_name,
+        description=body.description,
+    )
+    return result
+
+
+@router.post("/payment/confirm")
+def confirm_payment(body: PaymentConfirmRequest, user: dict = Depends(get_current_user)):
+    """
+    Confirm a Stripe PaymentIntent (processes the test payment).
+
+    This endpoint is called after create-intent. It confirms the payment
+    using Stripe's test card (Visa 4242) and returns a receipt.
+
+    Args:
+        body: PaymentConfirmRequest with payment_intent_id.
+
+    Returns:
+        dict with status, receipt_url, transaction_id, payment_method.
+    """
+    from backend.stripe_service import confirm_payment as stripe_confirm
+
+    if not body.payment_intent_id:
+        raise HTTPException(status_code=400, detail="payment_intent_id is required")
+
+    result = stripe_confirm(body.payment_intent_id)
+
+    if result.get("status") == "failed":
+        raise HTTPException(status_code=402, detail=result.get("error", "Payment failed"))
+
+    return result
+
+
+@router.get("/payment/status")
+def check_stripe_status():
+    """
+    Check whether Stripe is configured (for frontend to decide UI flow).
+    No authentication required.
+    """
+    from backend.stripe_service import is_stripe_configured
+    return {
+        "stripe_configured": is_stripe_configured(),
+        "mode": "test" if is_stripe_configured() else "simulated",
+    }
+

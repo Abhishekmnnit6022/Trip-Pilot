@@ -115,10 +115,10 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 CREATE OR REPLACE FUNCTION public.bot_get_bookings(p_user_id UUID, p_booking_type TEXT)
-RETURNS TABLE(provider_name TEXT, pnr_or_confirmation_number TEXT, travel_date DATE) AS $$
+RETURNS TABLE(provider_name TEXT, pnr_or_confirmation_number TEXT, travel_date DATE, details JSONB) AS $$
 BEGIN
     RETURN QUERY 
-    SELECT b.provider_name, b.pnr_or_confirmation_number, b.travel_date 
+    SELECT b.provider_name, b.pnr_or_confirmation_number, b.travel_date, b.details
     FROM public.bookings b
     WHERE b.user_id = p_user_id AND b.booking_type = p_booking_type
     ORDER BY b.booking_date DESC
@@ -145,3 +145,45 @@ BEGIN
     WHERE p.id = p_user_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+-- ============================================================================
+-- 7. Chat Sessions (Persistent Chat History Sidebar)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS public.chat_sessions (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    thread_id   TEXT NOT NULL UNIQUE,
+    title       TEXT DEFAULT 'New Conversation',
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON public.chat_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_updated_at ON public.chat_sessions(updated_at DESC);
+
+-- Enable RLS for chat sessions
+ALTER TABLE public.chat_sessions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own chat sessions"
+    ON public.chat_sessions FOR SELECT
+    USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own chat sessions"
+    ON public.chat_sessions FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own chat sessions"
+    ON public.chat_sessions FOR UPDATE
+    USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own chat sessions"
+    ON public.chat_sessions FOR DELETE
+    USING (auth.uid() = user_id);
+
+-- Auto-update updated_at on chat session changes
+DROP TRIGGER IF EXISTS update_chat_sessions_modtime ON public.chat_sessions;
+CREATE TRIGGER update_chat_sessions_modtime
+    BEFORE UPDATE ON public.chat_sessions
+    FOR EACH ROW EXECUTE FUNCTION public.update_modified_column();
