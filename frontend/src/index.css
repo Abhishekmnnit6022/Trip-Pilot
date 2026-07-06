@@ -1149,6 +1149,27 @@ a:hover { text-decoration: underline; }
   letter-spacing: 0.15em;
 }
 
+.confirm-transaction {
+  text-align: left;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+.txn-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.8rem; margin-bottom: 0.5rem;
+}
+.txn-row:last-child { margin-bottom: 0; }
+.txn-label { color: var(--text-secondary); }
+.txn-value { font-family: 'JetBrains Mono', monospace; font-weight: 500; color: var(--text-primary); }
+.txn-success { color: var(--green); font-family: var(--font); font-weight: 600; }
+.txn-link {
+  color: var(--accent); text-decoration: none; font-weight: 500;
+  transition: opacity 0.2s;
+}
+.txn-link:hover { opacity: 0.8; }
+
 .confirm-details {
   text-align: left;
   background: rgba(59, 130, 246, 0.05);
@@ -1195,3 +1216,44 @@ a:hover { text-decoration: underline; }
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
 }
 .emergency-fields input::placeholder { color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SIDEBAR ACCORDIONS (Bookings & Chat History)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.sidebar-action-btn {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: none; border: none; padding: 10px 12px;
+  color: var(--text-primary); font-family: var(--font); font-size: 0.85rem; font-weight: 500;
+  text-align: left; cursor: pointer; border-radius: var(--radius);
+  transition: background 0.2s;
+}
+.sidebar-action-btn:hover { background: var(--bg-card-hover); }
+.sidebar-action-btn .chevron { margin-left: auto; transition: transform 0.3s; color: var(--text-muted); }
+.sidebar-action-btn .chevron.rotated { transform: rotate(180deg); }
+
+.bookings-list, .chat-history-list {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 0 8px 16px; border-left: 1px solid var(--border); margin-left: 18px; margin-top: 4px;
+}
+
+.no-bookings { font-size: 0.8rem; color: var(--text-muted); padding: 4px 0; }
+
+.booking-sidebar-card {
+  display: flex; flex-direction: column; gap: 4px;
+  background: var(--bg-secondary); padding: 10px; border-radius: 6px;
+  border: 1px solid var(--border); font-size: 0.75rem;
+}
+.booking-sidebar-card strong { color: var(--text-primary); font-size: 0.8rem; }
+.booking-sidebar-card .pnr { font-family: 'JetBrains Mono', monospace; color: var(--accent); }
+.booking-sidebar-card .date { color: var(--text-muted); }
+
+.history-item {
+  display: flex; flex-direction: column; gap: 4px; text-align: left;
+  background: none; border: none; padding: 8px 10px; border-radius: 6px;
+  cursor: pointer; font-family: var(--font);
+  transition: background 0.2s;
+}
+.history-item:hover { background: var(--bg-card-hover); }
+.history-item.active { background: rgba(59, 130, 246, 0.15); border-left: 2px solid var(--accent); border-radius: 0 6px 6px 0; }
+.history-title { color: var(--text-primary); font-size: 0.8rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history-date { color: var(--text-muted); font-size: 0.7rem; }

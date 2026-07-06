@@ -503,7 +503,30 @@ def handle_message(message: dict) -> None:
         msg = f"Here are your latest <b>{b_type.title()}s</b>:\n\n"
         for b in bookings[:5]:
             msg += f"{emoji} <b>{b['provider_name']}</b>\n"
-            msg += f"🔖 PNR: <code>{b['pnr_or_confirmation_number']}</code>\n"
+            
+            # Use 'Booking ID' for hotels, 'PNR' for flights/trains
+            id_label = "Booking ID" if b_type == 'hotel' else "PNR"
+            msg += f"🔖 {id_label}: <code>{b['pnr_or_confirmation_number']}</code>\n"
+            
+            # Extract rich details if available
+            details = b.get('details') or {}
+            
+            if b_type == 'flight':
+                if details.get('flight_number'):
+                    msg += f"✈️ Flight: {details['flight_number']}\n"
+                if details.get('departure_airport') and details.get('arrival_airport'):
+                    msg += f"🗺️ Route: {details['departure_airport']} ➡️ {details['arrival_airport']}\n"
+                    
+            elif b_type == 'train':
+                if details.get('train_number'):
+                    msg += f"🚆 Train #: {details['train_number']}\n"
+                if details.get('departure_station') and details.get('arrival_station'):
+                    msg += f"🛤️ Route: {details['departure_station']} ➡️ {details['arrival_station']}\n"
+                    
+            elif b_type == 'hotel':
+                if details.get('checkin') and details.get('checkout'):
+                    msg += f"🛏️ Stay: {details['checkin']} to {details['checkout']}\n"
+                    
             msg += f"📅 Date: {b['travel_date'] or 'TBD'}\n\n"
 
         send_message(chat_id, msg)

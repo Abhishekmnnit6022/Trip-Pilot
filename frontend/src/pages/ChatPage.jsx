@@ -26,7 +26,7 @@ import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Send, LogOut, Plus, Map, Bot, User,
-  Loader2, UserCircle, Ticket, ChevronDown
+  Loader2, UserCircle, Ticket, ChevronDown, MessageSquare
 } from 'lucide-react';
 
 /* ── Agent metadata for the sidebar & inline status indicators ────────────── */
@@ -67,6 +67,8 @@ export default function ChatPage() {
   /* ── Sidebar state ──────────────────────────────────────────────────────── */
   const [bookings, setBookings] = useState([]);
   const [showBookings, setShowBookings] = useState(false);
+  const [chatSessions, setChatSessions] = useState([]);
+  const [showHistory, setShowHistory] = useState(true);
 
   /* ── Refs ────────────────────────────────────────────────────────────────── */
   const messagesEndRef = useRef(null);
@@ -127,9 +129,27 @@ export default function ChatPage() {
     }
   }, []);
 
+  /* ── Fetch user chat sessions from Supabase ─────────────────────────────── */
+  const fetchChatSessions = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('chat_sessions')
+        .select('*')
+        .order('updated_at', { ascending: false });
+      if (!error && data) {
+        setChatSessions(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch chat sessions:', err);
+    }
+  }, []);
+
   useEffect(() => {
-    if (user) fetchBookings();
-  }, [user, fetchBookings]);
+    if (user) {
+      fetchBookings();
+      fetchChatSessions();
+    }
+  }, [user, fetchBookings, fetchChatSessions]);
 
   /* ── Sign out handler ───────────────────────────────────────────────────── */
   const handleLogout = async () => {
@@ -142,6 +162,46 @@ export default function ChatPage() {
     setMessages([]);
     setThreadId(`${user.id}_${Date.now().toString(36)}`);
     setActiveAgent(null);
+  };
+
+  /* ── Load past chat thread ──────────────────────────────────────────────── */
+  const loadChatSession = async (sessionId) => {
+    setIsLoading(true);
+    setThreadId(sessionId);
+    setActiveAgent(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { navigate('/auth'); return; }
+
+      const resp = await fetch(`${API_URL}/api/chat/history/${sessionId}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      
+      if (resp.ok) {
+        const data = await resp.json();
+        
+        let loadedMessages = [...data.messages];
+        
+        // Append result cards if present
+        if (data.results && Object.keys(data.results).length > 0) {
+          for (const [type, payload] of Object.entries(data.results)) {
+            loadedMessages.push({ role: 'results', resultType: type, data: payload });
+          }
+        }
+        
+        // Append itinerary if present
+        if (data.itinerary) {
+          loadedMessages.push({ role: 'itinerary', content: data.itinerary });
+        }
+        
+        setMessages(loadedMessages);
+      }
+    } catch (err) {
+      console.error('Failed to load chat session:', err);
+      setMessages([{ role: 'assistant', content: '❌ Failed to load chat history.' }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   /**
@@ -249,8 +309,9 @@ export default function ChatPage() {
       setIsLoading(false);
       setActiveAgent(null);
       fetchBookings(); // Refresh bookings sidebar after chat completes
+      fetchChatSessions(); // Refresh chat history sidebar
     }
-  }, [isLoading, threadId, navigate, fetchBookings]);
+  }, [isLoading, threadId, navigate, fetchBookings, fetchChatSessions]);
 
   /** Handle form submission for the chat input. */
   const handleSubmit = (e) => {
@@ -300,18 +361,44 @@ export default function ChatPage() {
                 <p className="no-bookings">No bookings yet</p>
               ) : (
                 bookings.map((b) => (
-                  <div key={b.id} className="booking-item">
-                    <div className="booking-item-icon">
-                      {b.booking_type === 'flight' ? '✈️' : b.booking_type === 'train' ? '🚂' : '🏨'}
-                    </div>
-                    <div className="booking-item-info">
-                      <span className="booking-item-name">{b.provider_name || b.booking_type}</span>
-                      <span className="booking-item-pnr">PNR: {b.pnr_or_confirmation_number}</span>
-                    </div>
-                    <span className={`booking-status booking-status-${b.status}`}>
-                      {b.status}
-                    </span>
+                  <div key={b.id} className="booking-sidebar-card">
+                    <strong>{b.provider_name || b.booking_type}</strong>
+                    <span className="pnr">{b.pnr_or_confirmation_number}</span>
+                    <span className="date">{b.travel_date}</span>
                   </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Chat History Accordion */}
+        <div className="sidebar-section">
+          <button
+            className="sidebar-action-btn"
+            onClick={() => setShowHistory(!showHistory)}
+          >
+            <MessageSquare size={18} />
+            <span>Chat History</span>
+            <ChevronDown size={14} className={`chevron ${showHistory ? 'rotated' : ''}`} />
+          </button>
+
+          {showHistory && (
+            <div className="chat-history-list">
+              {chatSessions.length === 0 ? (
+                <p className="no-bookings">No past trips</p>
+              ) : (
+                chatSessions.map((session) => (
+                  <button
+                    key={session.id}
+                    className={`history-item ${session.thread_id === threadId ? 'active' : ''}`}
+                    onClick={() => loadChatSession(session.thread_id)}
+                  >
+                    <span className="history-title">{session.title}</span>
+                    <span className="history-date">
+                      {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </span>
+                  </button>
                 ))
               )}
             </div>
