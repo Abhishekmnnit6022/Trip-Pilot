@@ -87,6 +87,7 @@ class BookingRequest(BaseModel):
     provider_name: str = ""
     travel_date: str = ""                   # "YYYY-MM-DD"
     details: dict = {}
+    trip_id: str | None = None              # Optional trip to attach booking to
 
 
 class BookingResponse(BaseModel):
@@ -99,6 +100,21 @@ class BookingResponse(BaseModel):
     travel_date: str | None
     details: dict
     status: str
+    trip_id: str | None = None
+
+
+class TripCreateRequest(BaseModel):
+    """Schema for POST /api/trips request body."""
+    name: str = "My Trip"
+
+
+class TripResponse(BaseModel):
+    """Schema for trip API responses."""
+    id: str
+    name: str
+    status: str
+    created_at: str
+    completed_at: str | None = None
 
 
 class TelegramLinkRequest(BaseModel):
@@ -246,6 +262,25 @@ def create_booking(body: BookingRequest, user: dict = Depends(get_current_user))
     pnr = _generate_pnr()
     now = datetime.utcnow().isoformat()
 
+    # If no trip_id provided, find or create an active trip automatically
+    trip_id = body.trip_id
+    if not trip_id:
+        try:
+            client = get_user_client(user["token"])
+            trips_resp = (
+                client.table("trips")
+                .select("id")
+                .eq("user_id", user["user_id"])
+                .eq("status", "active")
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if trips_resp.data:
+                trip_id = trips_resp.data[0]["id"]
+        except Exception:
+            pass  # trip_id stays None — booking still saves without a trip
+
     row = {
         "user_id": user["user_id"],
         "booking_type": body.booking_type,
@@ -255,6 +290,7 @@ def create_booking(body: BookingRequest, user: dict = Depends(get_current_user))
         "travel_date": body.travel_date or None,
         "details": body.details,
         "status": "confirmed",
+        "trip_id": trip_id,
     }
 
     try:
@@ -295,6 +331,7 @@ def create_booking(body: BookingRequest, user: dict = Depends(get_current_user))
                 travel_date=str(saved["travel_date"]) if saved.get("travel_date") else None,
                 details=saved.get("details") or {},
                 status=saved["status"],
+                trip_id=saved.get("trip_id"),
             )
         raise HTTPException(status_code=500, detail="Booking insert returned no data")
     except HTTPException:
@@ -331,12 +368,122 @@ def list_bookings(user: dict = Depends(get_current_user)):
                 travel_date=str(row["travel_date"]) if row.get("travel_date") else None,
                 details=row.get("details") or {},
                 status=row["status"],
+                trip_id=row.get("trip_id"),
             )
             for row in (resp.data or [])
         ]
     except Exception as exc:
         log.error("Failed to list bookings: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to fetch bookings")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#   TRIP LIFECYCLE ENDPOINTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/trips", response_model=TripResponse)
+def create_trip(body: TripCreateRequest, user: dict = Depends(get_current_user)):
+    """Create a new active trip for the user."""
+    try:
+        client = get_user_client(user["token"])
+        resp = client.table("trips").insert({
+            "user_id": user["user_id"],
+            "name": body.name,
+            "status": "active",
+        }).execute()
+        if resp.data:
+            row = resp.data[0]
+            return TripResponse(
+                id=row["id"],
+                name=row["name"],
+                status=row["status"],
+                created_at=str(row["created_at"]),
+                completed_at=str(row["completed_at"]) if row.get("completed_at") else None,
+            )
+        raise HTTPException(status_code=500, detail="Trip insert returned no data")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("Failed to create trip: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Failed to create trip: {exc}")
+
+
+@router.get("/trips", response_model=list[TripResponse])
+def list_trips(user: dict = Depends(get_current_user)):
+    """List all trips for the user (active first, then completed)."""
+    try:
+        client = get_user_client(user["token"])
+        resp = (
+            client.table("trips")
+            .select("*")
+            .eq("user_id", user["user_id"])
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return [
+            TripResponse(
+                id=row["id"],
+                name=row["name"],
+                status=row["status"],
+                created_at=str(row["created_at"]),
+                completed_at=str(row["completed_at"]) if row.get("completed_at") else None,
+            )
+            for row in (resp.data or [])
+        ]
+    except Exception as exc:
+        log.error("Failed to list trips: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to fetch trips")
+
+
+@router.put("/trips/{trip_id}", response_model=TripResponse)
+def update_trip(trip_id: str, body: TripCreateRequest, user: dict = Depends(get_current_user)):
+    """Update an existing trip's details (e.g. name)."""
+    try:
+        client = get_user_client(user["token"])
+        resp = (
+            client.table("trips")
+            .update({"name": body.name})
+            .eq("id", trip_id)
+            .eq("user_id", user["user_id"])
+            .execute()
+        )
+        if resp.data:
+            row = resp.data[0]
+            return TripResponse(
+                id=row["id"],
+                name=row["name"],
+                status=row["status"],
+                created_at=str(row["created_at"]),
+                completed_at=str(row["completed_at"]) if row.get("completed_at") else None,
+            )
+        raise HTTPException(status_code=404, detail="Trip not found")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("Failed to update trip: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to update trip")
+
+
+@router.put("/trips/{trip_id}/complete")
+def complete_trip(trip_id: str, user: dict = Depends(get_current_user)):
+    """Mark a trip as completed."""
+    try:
+        client = get_user_client(user["token"])
+        resp = (
+            client.table("trips")
+            .update({"status": "completed", "completed_at": datetime.utcnow().isoformat()})
+            .eq("id", trip_id)
+            .eq("user_id", user["user_id"])
+            .execute()
+        )
+        if resp.data:
+            return {"status": "completed", "trip_id": trip_id}
+        raise HTTPException(status_code=404, detail="Trip not found")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("Failed to complete trip: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to complete trip")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -504,3 +651,17 @@ def check_stripe_status():
         "mode": "test" if is_stripe_configured() else "simulated",
     }
 
+# ══════════════════════════════════════════════════════════════════════════════
+#   TELEGRAM ENDPOINTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/telegram/bot-info")
+def api_get_bot_info():
+    """
+    Fetch the bot username from the Telegram API using the configured token.
+    This allows the frontend to dynamically generate QR codes and t.me links.
+    """
+    bot_data = get_bot_info()
+    if bot_data and "username" in bot_data:
+        return {"username": bot_data["username"]}
+    return {"username": "Trip_Pilot_bot"} # Fallback

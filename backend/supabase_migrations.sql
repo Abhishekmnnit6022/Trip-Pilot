@@ -187,3 +187,83 @@ DROP TRIGGER IF EXISTS update_chat_sessions_modtime ON public.chat_sessions;
 CREATE TRIGGER update_chat_sessions_modtime
     BEFORE UPDATE ON public.chat_sessions
     FOR EACH ROW EXECUTE FUNCTION public.update_modified_column();
+
+
+-- ============================================================================
+-- 8. Trip Lifecycle Management
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS public.trips (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL DEFAULT 'My Trip',
+    status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed')),
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_trips_user_id ON public.trips(user_id);
+CREATE INDEX IF NOT EXISTS idx_trips_status ON public.trips(status);
+
+ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own trips"
+    ON public.trips FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own trips"
+    ON public.trips FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own trips"
+    ON public.trips FOR UPDATE USING (auth.uid() = user_id);
+
+-- Add trip_id FK to bookings (nullable for backward compat with old bookings)
+ALTER TABLE public.bookings
+    ADD COLUMN IF NOT EXISTS trip_id UUID REFERENCES public.trips(id) ON DELETE SET NULL;
+
+-- RPC: Bot fetches active trips for a user (bypasses RLS)
+CREATE OR REPLACE FUNCTION public.bot_get_active_trips(p_user_id UUID)
+RETURNS TABLE(id UUID, name TEXT, created_at TIMESTAMPTZ) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT t.id, t.name, t.created_at
+    FROM public.trips t
+    WHERE t.user_id = p_user_id AND t.status = 'active'
+    ORDER BY t.created_at DESC;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC: Bot completes a trip (bypasses RLS)
+CREATE OR REPLACE FUNCTION public.bot_complete_trip(p_trip_id UUID)
+RETURNS void AS $$
+BEGIN
+    UPDATE public.trips SET status = 'completed', completed_at = now()
+    WHERE id = p_trip_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC: Bot fetches all bookings for a specific trip (bypasses RLS)
+CREATE OR REPLACE FUNCTION public.bot_get_trip_bookings(p_trip_id UUID)
+RETURNS TABLE(
+    booking_type TEXT,
+    provider_name TEXT,
+    pnr_or_confirmation_number TEXT,
+    travel_date DATE,
+    details JSONB
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT b.booking_type, b.provider_name, b.pnr_or_confirmation_number,
+           b.travel_date, b.details
+    FROM public.bookings b
+    WHERE b.trip_id = p_trip_id
+    ORDER BY b.travel_date ASC NULLS LAST;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC: Bot fetches user's full name (bypasses RLS)
+CREATE OR REPLACE FUNCTION public.bot_get_user_name(p_user_id UUID)
+RETURNS TEXT AS $$
+DECLARE v_name TEXT;
+BEGIN
+    SELECT p.full_name INTO v_name FROM public.user_profiles p WHERE p.id = p_user_id;
+    RETURN COALESCE(v_name, 'Traveler');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

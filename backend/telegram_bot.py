@@ -16,10 +16,12 @@ State Machine:
   SOS_STATE[chat_id]  stores the active SOS countdown state per user.
 """
 
+import os
 import time
 import threading
 import requests
 import logging
+from datetime import datetime
 from supabase import create_client
 
 from backend.config import TELEGRAM_BOT_TOKEN, SUPABASE_URL, SUPABASE_ANON_KEY
@@ -39,6 +41,9 @@ SOS_STATE = {}
 
 # Emergency contact setup state: {chat_id: {"step": "name"|"phone", "name": "..."}}
 EC_STATE = {}
+
+# End-trip state: {chat_id: {"trips": [{id, name}, ...], "user_id": "..."}}
+TRIP_END_STATE = {}
 
 
 def send_message(chat_id: int, text: str, reply_markup: dict = None) -> None:
@@ -110,9 +115,8 @@ def _get_main_menu_keyboard() -> dict:
     """
     return {
         "keyboard": [
-            [{"text": "✈️ My Flights"}, {"text": "🚂 My Trains"}],
-            [{"text": "🏨 My Hotels"}, {"text": "🌍 Plan New Trip"}],
-            [{"text": "📞 Emergency Contact"}],
+            [{"text": "🎒 My Trips"}, {"text": "🌍 Plan New Trip"}],
+            [{"text": "📞 Emergency Contact"}, {"text": "🏁 End Trip"}],
             [{"text": "🆘 SOS EMERGENCY 🆘"}]
         ],
         "resize_keyboard": True
@@ -246,9 +250,12 @@ def handle_message(message: dict) -> None:
             _handle_sos_timeout(chat_id, location_link=location_link)
             return
 
-    if text in ["🚨 SOS Emergency", "🆘 SOS EMERGENCY 🆘", "🆘 SOS EMERGENCY", "📞 Emergency Contact"]:
+    if text in ["🚨 SOS Emergency", "🆘 SOS EMERGENCY 🆘", "🆘 SOS EMERGENCY", "📞 Emergency Contact", "🏁 End Trip"]:
         LINK_STATE.pop(chat_id, None)
         EC_STATE.pop(chat_id, None)
+        # Don't clear TRIP_END_STATE here if user is clicking End Trip
+        if text != "🏁 End Trip":
+            TRIP_END_STATE.pop(chat_id, None)
 
     # ── 1. /start command ────────────────────────────────────────────────────
     if text == "/start":
@@ -474,65 +481,86 @@ def handle_message(message: dict) -> None:
         return
 
     # ── 7. Menu Buttons: View Bookings ───────────────────────────────────────
-    if text in ["✈️ My Flights", "🚂 My Trains", "🏨 My Hotels"]:
+    # (Bookings are now handled inside the 'My Trips' inline menu)
+
+    # ── 8. Menu Button: End Trip ──────────────────────────────────────────
+    if text == "🏁 End Trip":
         user_id = _get_linked_user_id(chat_id)
-
         if not user_id:
-            send_message(chat_id, "⚠️ Your account is not linked yet. Please type /start to link your account.")
+            send_message(chat_id, "⚠️ Your account is not linked yet. Type /start first.")
             return
 
-        if "Flights" in text:
-            b_type, emoji = "flight", "✈️"
-        elif "Trains" in text:
-            b_type, emoji = "train", "🚂"
-        else:
-            b_type, emoji = "hotel", "🏨"
-
-        # Fetch bookings via RPC (with fallback to direct query)
+        # Fetch active trips
         try:
-            b_resp = _supabase.rpc("bot_get_bookings", {"p_user_id": user_id, "p_booking_type": b_type}).execute()
-            bookings = b_resp.data or []
-        except Exception:
-            b_resp = _supabase.table("bookings").select("*").eq("user_id", user_id).eq("booking_type", b_type).order("booking_date", desc=True).execute()
-            bookings = b_resp.data or []
-
-        if not bookings:
-            send_message(chat_id, f"You don't have any {b_type} bookings right now.")
+            resp = _supabase.rpc("bot_get_active_trips", {"p_user_id": user_id}).execute()
+            trips = resp.data or []
+        except Exception as exc:
+            log.error("Failed to fetch active trips: %s", exc)
+            send_message(chat_id, "❌ Could not fetch your trips. Please try again.")
             return
 
-        msg = f"Here are your latest <b>{b_type.title()}s</b>:\n\n"
-        for b in bookings[:5]:
-            msg += f"{emoji} <b>{b['provider_name']}</b>\n"
-            
-            # Use 'Booking ID' for hotels, 'PNR' for flights/trains
-            id_label = "Booking ID" if b_type == 'hotel' else "PNR"
-            msg += f"🔖 {id_label}: <code>{b['pnr_or_confirmation_number']}</code>\n"
-            
-            # Extract rich details if available
-            details = b.get('details') or {}
-            
-            if b_type == 'flight':
-                if details.get('flight_number'):
-                    msg += f"✈️ Flight: {details['flight_number']}\n"
-                if details.get('departure_airport') and details.get('arrival_airport'):
-                    msg += f"🗺️ Route: {details['departure_airport']} ➡️ {details['arrival_airport']}\n"
-                    
-            elif b_type == 'train':
-                if details.get('train_number'):
-                    msg += f"🚆 Train #: {details['train_number']}\n"
-                if details.get('departure_station') and details.get('arrival_station'):
-                    msg += f"🛤️ Route: {details['departure_station']} ➡️ {details['arrival_station']}\n"
-                    
-            elif b_type == 'hotel':
-                if details.get('checkin') and details.get('checkout'):
-                    msg += f"🛏️ Stay: {details['checkin']} to {details['checkout']}\n"
-                    
-            msg += f"📅 Date: {b['travel_date'] or 'TBD'}\n\n"
+        if not trips:
+            send_message(chat_id, "You don't have any active trips right now.", _get_main_menu_keyboard())
+            return
 
-        send_message(chat_id, msg)
+        # Store trips in state and show selection keyboard
+        TRIP_END_STATE[chat_id] = {"trips": trips, "user_id": user_id}
+
+        keyboard = [[{"text": f"🏁 {t['name']}"}] for t in trips]
+        keyboard.append([{"text": "❌ Cancel"}])
+
+        send_message(
+            chat_id,
+            "🏁 <b>End a Trip</b>\n\n"
+            "Select the trip you want to mark as completed:\n"
+            "(An expense report PDF will be generated and sent to you)",
+            {"keyboard": keyboard, "resize_keyboard": True, "one_time_keyboard": True}
+        )
         return
 
-    # ── 8. Menu Button: Plan New Trip ────────────────────────────────────────
+    # ── 8b. Trip End Selection Handler ────────────────────────────────────
+    if chat_id in TRIP_END_STATE:
+        state = TRIP_END_STATE[chat_id]
+
+        if text == "❌ Cancel":
+            TRIP_END_STATE.pop(chat_id, None)
+            send_message(chat_id, "Trip ending cancelled.", _get_main_menu_keyboard())
+            return
+
+        # Match the selected trip name
+        selected_name = text.replace("🏁 ", "").strip()
+        matched_trip = None
+        for t in state["trips"]:
+            if t["name"] == selected_name:
+                matched_trip = t
+                break
+
+        if not matched_trip:
+            send_message(chat_id, "⚠️ Please select a trip from the buttons above, or tap ❌ Cancel.")
+            return
+
+        trip_id = matched_trip["id"]
+        user_id = state["user_id"]
+        TRIP_END_STATE.pop(chat_id, None)
+
+        send_message(chat_id, f"⏳ Completing <b>{matched_trip['name']}</b> and generating your expense report...")
+
+        # We extracted the logic into a separate function so it can be reused from bot_trip_features.py
+        _generate_and_send_pdf(chat_id, user_id, trip_id)
+        return
+
+    # ── 9. Menu Button: My Trips (Active Context) ────────────────────────────
+    if text == "🎒 My Trips":
+        user_id = _get_linked_user_id(chat_id)
+        if not user_id:
+            send_message(chat_id, "⚠️ Your account is not linked yet. Type /start first.")
+            return
+            
+        from backend.bot_trip_features import handle_my_trips
+        handle_my_trips(chat_id, user_id)
+        return
+
+    # ── 10. Menu Button: Plan New Trip ───────────────────────────────────────
     if text == "🌍 Plan New Trip":
         send_message(
             chat_id,
@@ -541,7 +569,7 @@ def handle_message(message: dict) -> None:
         )
         return
 
-    # ── 9. Phone Number Input (Account Linking Step 1) ───────────────────────
+    # ── 10. Phone Number Input (Account Linking Step 1) ───────────────────────
     clean_text = text.replace(" ", "").replace("+", "").replace("-", "")
     if clean_text.isdigit() and len(clean_text) >= 8:
         # Fetch all profiles to match against
@@ -586,18 +614,22 @@ def handle_message(message: dict) -> None:
             )
         return
 
-    # ── 10. Menu Command & Fallback ──────────────────────────────────────────
+    # ── 11. Menu Command & Fallback ──────────────────────────────────────────
     user_id = _get_linked_user_id(chat_id)
     if user_id and text == "/menu":
         send_message(chat_id, "Here is your menu:", _get_main_menu_keyboard())
         return
         
-    if user_id and not (chat_id in LINK_STATE or chat_id in EC_STATE or chat_id in SOS_STATE):
-        send_message(
-            chat_id,
-            "I didn't understand that. Please use the menu buttons below.",
-            _get_main_menu_keyboard()
-        )
+    if user_id and not (chat_id in LINK_STATE or chat_id in EC_STATE or chat_id in SOS_STATE or chat_id in TRIP_END_STATE):
+        # Fallback: check if the user has an active trip and this is an ad-hoc expense
+        from backend.bot_trip_features import handle_ad_hoc_expense
+        handled = handle_ad_hoc_expense(chat_id, user_id, text)
+        if not handled:
+            send_message(
+                chat_id,
+                "I didn't understand that. You can send an expense like 'Rs 500 for taxi' if you have an active trip selected, or use the menu below.",
+                _get_main_menu_keyboard()
+            )
 
 
 def poll_telegram_forever() -> None:
@@ -632,6 +664,9 @@ def poll_telegram_forever() -> None:
                     offset = update["update_id"] + 1
                     if "message" in update:
                         handle_message(update["message"])
+                    elif "callback_query" in update:
+                        from backend.bot_trip_features import handle_callback_query
+                        handle_callback_query(update["callback_query"])
             else:
                 log.error("Telegram API Error: %s", resp.text)
                 time.sleep(5)
@@ -639,3 +674,104 @@ def poll_telegram_forever() -> None:
         except Exception as e:
             log.error("Telegram polling error (connection issue): %s", e)
             time.sleep(5)
+
+
+def _generate_and_send_pdf(chat_id: int, user_id: str, trip_id: str):
+    """Generate and send the final PDF report for a trip via Telegram."""
+    import tempfile
+    import traceback
+    
+    # 0. Fetch the trip
+    try:
+        t_resp = _supabase.rpc("bot_get_trip_by_id", {"p_trip_id": trip_id}).execute()
+        if not t_resp.data:
+            log.error("Trip not found for PDF generation.")
+            return
+        matched_trip = t_resp.data[0]
+    except Exception as exc:
+        log.error("Failed to fetch trip: %s", exc)
+        return
+        
+    # 1. Mark trip as completed
+    try:
+        _supabase.rpc("bot_complete_trip", {"p_trip_id": trip_id}).execute()
+    except Exception as exc:
+        log.error("Failed to complete trip: %s", exc)
+        send_message(chat_id, "❌ Failed to complete the trip. Please try again.", _get_main_menu_keyboard())
+        return
+
+    # 2. Fetch all bookings for this trip
+    try:
+        b_resp = _supabase.rpc("bot_get_trip_bookings", {"p_trip_id": trip_id}).execute()
+        bookings = b_resp.data or []
+    except Exception as exc:
+        log.error("Failed to fetch trip bookings: %s", exc)
+        bookings = []
+
+    # 2b. Fetch custom expenses for this trip
+    try:
+        e_resp = _supabase.table("trip_expenses").select("*").eq("trip_id", trip_id).execute()
+        custom_expenses = e_resp.data or []
+    except Exception as exc:
+        log.error("Failed to fetch custom expenses: %s", exc)
+        custom_expenses = []
+
+    # 3. Fetch user name
+    try:
+        name_resp = _supabase.rpc("bot_get_user_name", {"p_user_id": user_id}).execute()
+        traveler_name = name_resp.data or "Traveler"
+    except Exception:
+        traveler_name = "Traveler"
+
+    # 4. Generate PDF expense report
+    try:
+        from backend.pdf_report import generate_trip_report
+
+        pdf_bytes = generate_trip_report(
+            trip_name=matched_trip["name"],
+            traveler_name=traveler_name,
+            bookings=bookings,
+            custom_expenses=custom_expenses,
+            trip_created=str(matched_trip.get("created_at", "")),
+            trip_completed=datetime.now().isoformat(),
+        )
+
+        # Write PDF to temp file and send via Telegram
+        safe_name = matched_trip["name"].replace(" ", "_")[:30]
+        tmp_path = os.path.join(tempfile.gettempdir(), f"TripPilot_{safe_name}_Report.pdf")
+        with open(tmp_path, "wb") as f:
+            f.write(pdf_bytes)
+
+        # Send PDF via Telegram sendDocument API
+        with open(tmp_path, "rb") as f:
+            requests.post(
+                API_URL + "sendDocument",
+                data={
+                    "chat_id": chat_id,
+                    "caption": f"📊 <b>Expense Report — {matched_trip['name']}</b>\n\n"
+                               f"Total bookings: {len(bookings)}\n"
+                               f"Trip has been marked as completed. ✅",
+                    "parse_mode": "HTML",
+                },
+                files={"document": (f"TripPilot_{safe_name}_Report.pdf", f, "application/pdf")},
+                timeout=30,
+            )
+
+        # Clean up temp file
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+        log.info("[EndTrip] PDF sent for trip '%s' (user: %s)", matched_trip["name"], user_id)
+
+    except Exception as exc:
+        err_details = traceback.format_exc()
+        log.error("Failed to generate/send PDF report: %s\n%s", exc, err_details)
+        send_message(
+            chat_id,
+            f"✅ Trip <b>{matched_trip['name']}</b> has been completed!\n\n"
+            f"⚠️ Could not generate the PDF report: {str(exc)}"
+        )
+
+    send_message(chat_id, "🎉 Trip completed! Use the menu to view your other trips.", _get_main_menu_keyboard())

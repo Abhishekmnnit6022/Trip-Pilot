@@ -88,11 +88,13 @@ def send_booking_confirmation(
 
     details_text = "\n".join(detail_lines) if detail_lines else "  See app for details"
 
+    id_label = "Booking ID" if booking_type == "hotel" else "PNR"
+
     text = (
         f"{emoji} <b>TripPilot — Booking Confirmed!</b>\n\n"
         f"<b>Type:</b> {booking_type.title()}\n"
         f"<b>Provider:</b> {provider_name}\n"
-        f"<b>PNR:</b> <code>{pnr}</code>\n"
+        f"<b>{id_label}:</b> <code>{pnr}</code>\n"
         f"<b>Travel Date:</b> {travel_date or 'TBD'}\n\n"
         f"<b>Details:</b>\n{details_text}\n\n"
         f"✅ Your booking is confirmed. Have a great trip! 🎉"

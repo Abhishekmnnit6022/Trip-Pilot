@@ -68,7 +68,9 @@ export default function ChatPage() {
   const [bookings, setBookings] = useState([]);
   const [showBookings, setShowBookings] = useState(false);
   const [chatSessions, setChatSessions] = useState([]);
-  const [showHistory, setShowHistory] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
+  const [botUsername, setBotUsername] = useState('');
+  const [activeTripId, setActiveTripId] = useState(null);
 
   /* ── Refs ────────────────────────────────────────────────────────────────── */
   const messagesEndRef = useRef(null);
@@ -148,6 +150,14 @@ export default function ChatPage() {
     if (user) {
       fetchBookings();
       fetchChatSessions();
+      
+      // Fetch bot username for the QR code
+      fetch(`${API_URL}/api/telegram/bot-info`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.username) setBotUsername(data.username);
+        })
+        .catch(err => console.error('Failed to fetch bot info:', err));
     }
   }, [user, fetchBookings, fetchChatSessions]);
 
@@ -162,6 +172,7 @@ export default function ChatPage() {
     setMessages([]);
     setThreadId(`${user.id}_${Date.now().toString(36)}`);
     setActiveAgent(null);
+    setActiveTripId(null); // Reset trip for new conversation
   };
 
   /* ── Load past chat thread ──────────────────────────────────────────────── */
@@ -229,6 +240,36 @@ export default function ChatPage() {
     setIsLoading(true);
     setActiveAgent(null);
 
+    let activeTripIdRef = activeTripId;
+
+    // Auto-create a trip on first message if none exists
+    if (!activeTripId) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          // Generate smart trip name from the user's first message
+          const words = text.trim().split(/\s+/).slice(0, 5).join(' ');
+          const tripName = words.length > 3 ? words : `Trip — ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+
+          const tripResp = await fetch(`${API_URL}/api/trips`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ name: tripName }),
+          });
+          if (tripResp.ok) {
+            const tripData = await tripResp.json();
+            setActiveTripId(tripData.id);
+            activeTripIdRef = tripData.id;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to create trip:', err);
+      }
+    }
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { navigate('/auth'); return; }
@@ -294,6 +335,23 @@ export default function ChatPage() {
                 role: 'itinerary',
                 content: data.content,
               }]);
+            } else if (data.thread_id !== undefined && data.destination) {
+              // State snapshot
+              if (activeTripIdRef || activeTripId) {
+                const tId = activeTripIdRef || activeTripId;
+                const dest = data.destination.charAt(0).toUpperCase() + data.destination.slice(1);
+                const orig = data.origin ? data.origin.charAt(0).toUpperCase() + data.origin.slice(1) : '';
+                const cleanName = orig ? `Trip: ${orig} to ${dest}` : `Trip to ${dest}`;
+                
+                fetch(`${API_URL}/api/trips/${tId}`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`,
+                  },
+                  body: JSON.stringify({ name: cleanName }),
+                }).catch(() => {});
+              }
             }
           } catch {
             // Skip malformed JSON chunks
@@ -361,8 +419,11 @@ export default function ChatPage() {
                 <p className="no-bookings">No bookings yet</p>
               ) : (
                 bookings.map((b) => (
-                  <div key={b.id} className="booking-sidebar-card">
-                    <strong>{b.provider_name || b.booking_type}</strong>
+                  <div key={b.id} className={`booking-sidebar-card ${b.status === 'completed' ? 'completed' : ''}`}>
+                    <strong>
+                      {b.provider_name || b.booking_type}
+                      {b.status === 'completed' && <span style={{fontSize: '10px', color: '#10b981', marginLeft: '5px'}}> (Completed)</span>}
+                    </strong>
                     <span className="pnr">{b.pnr_or_confirmation_number}</span>
                     <span className="date">{b.travel_date}</span>
                   </div>
@@ -413,6 +474,29 @@ export default function ChatPage() {
               <span>{AGENT_LABELS[activeAgent]?.icon}</span>
               <span>{AGENT_LABELS[activeAgent]?.label || activeAgent}</span>
               <Loader2 size={14} className="spin" />
+            </div>
+          </div>
+        )}
+
+        {/* Telegram QR Code */}
+        {botUsername && (
+          <div className="sidebar-section telegram-qr-section">
+            <h3>📱 Connect on Telegram</h3>
+            <div className="telegram-qr-card">
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://t.me/${botUsername}`} 
+                alt="Telegram Bot QR" 
+                className="qr-code-img"
+              />
+              <p className="qr-scan-text">Scan to start chatting with your AI assistant on the go!</p>
+              <a 
+                href={`https://t.me/${botUsername}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="telegram-link-btn"
+              >
+                @{botUsername}
+              </a>
             </div>
           </div>
         )}
@@ -498,27 +582,42 @@ export default function ChatPage() {
                 {/* Result cards */}
                 {msg.role === 'results' && (
                   <div className="results-container">
-                    <div className="results-scroll">
-                      {msg.resultType === 'flights' && msg.data.map((f, j) => (
-                        <FlightCard key={j} flight={f} onBook={handleOpenBooking} />
-                      ))}
-                      {msg.resultType === 'trains' && msg.data.map((t, j) => (
-                        <TrainCard key={j} train={t} onBook={handleOpenBooking} />
-                      ))}
-                      {msg.resultType === 'hotels' && msg.data.map((h, j) => (
-                        <HotelCard key={j} hotel={h} onBook={handleOpenBooking} />
-                      ))}
-                      {msg.resultType === 'return_transport' && (
-                        <>
-                          {(msg.data.flights || []).map((f, j) => (
-                            <FlightCard key={`rf-${j}`} flight={f} onBook={handleOpenBooking} />
-                          ))}
-                          {(msg.data.trains || []).map((t, j) => (
-                            <TrainCard key={`rt-${j}`} train={t} onBook={handleOpenBooking} />
-                          ))}
-                        </>
-                      )}
-                    </div>
+                    {msg.resultType !== 'return_transport' ? (
+                      <div className="results-scroll">
+                        {msg.resultType === 'flights' && msg.data.map((f, j) => (
+                          <FlightCard key={j} flight={f} onBook={handleOpenBooking} />
+                        ))}
+                        {msg.resultType === 'trains' && msg.data.map((t, j) => (
+                          <TrainCard key={j} train={t} onBook={handleOpenBooking} />
+                        ))}
+                        {msg.resultType === 'hotels' && msg.data.map((h, j) => (
+                          <HotelCard key={j} hotel={h} onBook={handleOpenBooking} />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="return-transport-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                        {msg.data.flights && msg.data.flights.length > 0 && (
+                          <div className="return-section">
+                            <h4 style={{ margin: '0 0 10px 0', color: '#94a3b8', fontSize: '0.95rem' }}>✈️ Return Flights</h4>
+                            <div className="results-scroll">
+                              {msg.data.flights.map((f, j) => (
+                                <FlightCard key={`rf-${j}`} flight={f} onBook={handleOpenBooking} />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {msg.data.trains && msg.data.trains.length > 0 && (
+                          <div className="return-section">
+                            <h4 style={{ margin: '0 0 10px 0', color: '#94a3b8', fontSize: '0.95rem' }}>🚂 Return Trains</h4>
+                            <div className="results-scroll">
+                              {msg.data.trains.map((t, j) => (
+                                <TrainCard key={`rt-${j}`} train={t} onBook={handleOpenBooking} />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </motion.div>
@@ -567,6 +666,7 @@ export default function ChatPage() {
         onClose={() => setBookingModal({ open: false, data: null })}
         bookingData={bookingModal.data}
         onBooked={() => fetchBookings()}
+        tripId={activeTripId}
       />
     </div>
   );
