@@ -63,7 +63,10 @@ Rules:
 6. If origin + destination + dates are all known AND no search done yet → action = "search_all"
 7. If the user asks for return tickets → action = "search_return"
 8. If search results exist and user wants itinerary → action = "generate_itinerary"
-9. For general questions / chit-chat → action = "respond"
+9. CRITICAL RESTRICTION: If `{destination}` is already known, and the user asks to plan a completely new trip to a DIFFERENT destination, DO NOT extract the new destination. Set action = "respond" and politely tell them: "It looks like you are trying to plan a new trip to a different destination! To keep everything organized and ensure flights/trains are booked correctly, please click 'Plan New Trip' in the left menu to start a fresh chat for this new trip."
+10. EXCEPTION to rule 9: The user CAN ask for different hotels, but ONLY if they are in the exact same `{destination}`. If they do, extract their new budget/preference into `budget` and set action = "search_hotels".
+11. If the user explicitly asks for different/cheaper/better hotels (e.g. "show cheaper hotels"), extract the budget constraint and set action = "search_hotels".
+12. For general questions / chit-chat → action = "respond"
 
 Respond with ONLY valid JSON (no markdown):
 {{
@@ -74,7 +77,7 @@ Respond with ONLY valid JSON (no markdown):
   "num_days": <int or null>,
   "budget": "<string or null>",
   "travel_mode": "<flight|train|both or null>",
-  "action": "<ask_user|search_all|search_return|generate_itinerary|respond>",
+  "action": "<ask_user|search_all|search_return|search_hotels|generate_itinerary|respond>",
   "response": "<your natural-language reply to the user>"
 }}
 """
@@ -119,7 +122,13 @@ def router_agent(state: TravelState) -> dict:
 
     # Parse the JSON response
     try:
-        parsed = json.loads(response.content)
+        content = response.content.strip()
+        if content.startswith("```json"):
+            content = content[7:-3]
+        elif content.startswith("```"):
+            content = content[3:-3]
+        content = content.strip()
+        parsed = json.loads(content)
     except json.JSONDecodeError:
         # If LLM didn't return valid JSON, treat as a general response
         return {
@@ -221,9 +230,10 @@ def hotel_agent(state: TravelState) -> dict:
     destination = state.get("destination", "")
     checkin = state.get("start_date", "")
     checkout = state.get("end_date", "")
+    budget = state.get("budget", "")
 
-    log.info("Searching hotels in %s (%s to %s)", destination, checkin, checkout)
-    hotels = search_hotels_structured(destination, checkin, checkout)
+    log.info("Searching hotels in %s (%s to %s) with budget: %s", destination, checkin, checkout, budget)
+    hotels = search_hotels_structured(destination, checkin, checkout, budget)
 
     return {
         "hotel_results": json.dumps(hotels),
@@ -484,7 +494,13 @@ def budget_check_node(state: TravelState) -> dict:
             SystemMessage(content=_COST_EXTRACT_PROMPT),
             HumanMessage(content=f"Extract the total cost from this itinerary:\n\n{itinerary}"),
         ])
-        parsed = json.loads(response.content)
+        content = response.content.strip()
+        if content.startswith("```json"):
+            content = content[7:-3]
+        elif content.startswith("```"):
+            content = content[3:-3]
+        content = content.strip()
+        parsed = json.loads(content)
         total_cost = int(parsed.get("total_cost_inr", 0))
     except (json.JSONDecodeError, ValueError, TypeError) as exc:
         log.warning("[BudgetCheck] Could not parse cost from LLM: %s", exc)
@@ -617,7 +633,13 @@ def budget_optimizer_node(state: TravelState) -> dict:
             SystemMessage(content="You are an expert budget travel optimizer. Your job is to reduce trip costs while maintaining a great travel experience."),
             HumanMessage(content=prompt),
         ])
-        parsed = json.loads(response.content)
+        content = response.content.strip()
+        if content.startswith("```json"):
+            content = content[7:-3]
+        elif content.startswith("```"):
+            content = content[3:-3]
+        content = content.strip()
+        parsed = json.loads(content)
         optimized_itinerary = parsed.get("optimized_itinerary", itinerary)
         new_cost = int(parsed.get("new_estimated_cost", total_cost))
         changes = parsed.get("changes_made", [])

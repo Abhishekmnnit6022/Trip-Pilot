@@ -193,6 +193,7 @@ def _search_railradar(origin: str, destination: str, date: str) -> list[dict] | 
                 "classes": "Check availability on IRCTC",
                 "runs_on": ", ".join(day.title() for day in run_days) or "N/A",
                 "booking_url": booking_url,
+                "travel_date": date,
             }
         )
 
@@ -242,6 +243,7 @@ def search_trains_structured(
     booking_url = get_irctc_url()
     for t in trains:
         t["booking_url"] = booking_url
+        t["travel_date"] = date
 
     return trains
 

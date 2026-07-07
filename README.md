@@ -25,6 +25,8 @@ TripPilot is a state-of-the-art, enterprise-grade AI travel platform. Built on L
   - The bot instantly generates a dynamic **Google Maps Live Location** link.
   - The backend bypasses database row-level security to extract the user's emergency contact.
   - A real-time **Emergency SMS** is fired to their loved ones via the **Fast2SMS API** containing their live location, ensuring safety even in low-bandwidth travel areas.
+- **On-Trip Expense & Itinerary Tracking:** The bot serves as an active companion during your trip. It turns your AI-generated itinerary into an interactive checklist. As you tap to check off completed activities, the bot securely logs your real-world expenses on the go.
+- **Dynamic PDF Reporting:** Clicking "End Trip" triggers a background process that compiles all your pre-trip bookings and on-trip custom expenses into a beautifully styled, final PDF Expense Report. This invoice is instantly delivered to your Telegram chat.
 
 ### 💾 Persistent Memory & Cloud Sync
 - **Chat History Sidebar:** Just like ChatGPT, all previous AI travel sessions are saved to Supabase and can be clicked to resume your context instantly.

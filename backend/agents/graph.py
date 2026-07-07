@@ -49,6 +49,8 @@ def _route_after_router(state: TravelState) -> str:
         return "search_all"
     if phase == "search_return":
         return "search_return"
+    if phase == "search_hotels":
+        return "search_hotels"
     if phase == "generate_itinerary":
         return "generate_itinerary"
     # ask_user, respond, results_shown, complete → stop
@@ -123,6 +125,7 @@ def build_graph() -> StateGraph:
         {
             "search_all": "flight_agent",
             "search_return": "return_agent",
+            "search_hotels": "hotel_agent",
             "generate_itinerary": "itinerary_agent",
             "end": END,
         },

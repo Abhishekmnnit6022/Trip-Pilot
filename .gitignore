@@ -6,6 +6,5 @@ frontend/.env
 *.log
 .vscode/
 
-documentation.txt
 update_db.py
 output.txt

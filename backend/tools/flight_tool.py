@@ -41,7 +41,7 @@ CITY_AIRPORT_MAP = {
     "vrindavan": "AGR", "haridwar": "DED", "rishikesh": "DED", "aligarh": "AGR", "jhansi": "GWL",
     "ujjain": "IDR", "somnath": "DIU", "dwarka": "JGA", "rameshwaram": "IXM", "ooty": "CJB",
     "kodaikanal": "IXM", "munnar": "COK", "wayanad": "CCJ", "hampi": "VDY", "khajuraho": "HJR",
-    "puri": "BBI", "konark": "BBI", "mahabaleshwar": "PNQ", "lonavala": "PNQ"
+    "puri": "BBI", "konark": "BBI", "mahabaleshwar": "PNQ", "lonavala": "PNQ", "kerala": "COK"
 }
 
 def _get_iata(place: str) -> str:
@@ -128,6 +128,7 @@ def search_flights(
                 "arrival_time": arr_time,
                 "status": status,
                 "booking_url": booking_url,
+                "travel_date": date,
             }
         )
 

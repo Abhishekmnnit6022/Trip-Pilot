@@ -107,6 +107,7 @@ def search_flights_web(origin: str, destination: str, date: str = "") -> list[di
             "arrival_time": "Check website",
             "status": "web_search_result",
             "booking_url": r.get("url", booking_url),
+            "travel_date": date,
         })
 
     log.info("[Tavily Fallback] Found %d flight result(s) for %s → %s", len(flights), origin, destination)

@@ -48,17 +48,17 @@ def _resolve_destination(destination: str) -> tuple[str, str] | None:
         return None
 
     normalized = destination.casefold().strip()
-    city_results = [item for item in results if item.get("search_type", "").casefold() == "city"]
-    exact_city = next(
+    preferred_results = [item for item in results if item.get("search_type", "").casefold() in ["city", "region", "district"]]
+    exact_match = next(
         (
             item
-            for item in city_results
+            for item in preferred_results
             if item.get("name", "").casefold() == normalized
             or item.get("city_name", "").casefold() == normalized
         ),
         None,
     )
-    match = exact_city or (city_results[0] if city_results else results[0])
+    match = exact_match or (preferred_results[0] if preferred_results else results[0])
     dest_id = match.get("dest_id")
     search_type = match.get("search_type")
     if not dest_id or not search_type:
@@ -149,12 +149,12 @@ _PARSE_PROMPT = """\
 You are a data extraction assistant. Given raw web search results about hotels,
 extract a JSON array of hotel objects.
 
-Each object MUST have these keys (use "N/A" for unknown values):
-  - name: string
-  - rating: string or number
-  - rating_word: string (e.g. "Excellent", "Good")
-  - price: string (e.g. "₹2,500/night" or "N/A")
-  - amenities: string (e.g. "WiFi, Pool, Breakfast")
+Each object MUST have these keys:
+  - name: string (The exact name of the hotel)
+  - rating: string or number (e.g. 4.5 or 9.2, use "N/A" if unknown)
+  - rating_word: string (e.g. "Excellent", "Good", use "N/A" if unknown)
+  - price: integer (IMPORTANT: MUST be a plain integer in INR. Do not include '₹', commas, or '/night'. Estimate if foreign currency. If unknown, estimate based on hotel quality.)
+  - amenities: string (e.g. "WiFi, Pool", max 3 words. Use "N/A" if unknown)
 
 Return ONLY a valid JSON array. No markdown, no explanation.
 If you cannot find any hotels, return an empty array: []
@@ -162,7 +162,7 @@ If you cannot find any hotels, return an empty array: []
 
 
 def _search_tavily_fallback(
-    destination: str, checkin: str, checkout: str
+    destination: str, checkin: str, checkout: str, budget: str = ""
 ) -> list[dict]:
     """Fallback: search hotels via Tavily + LLM parsing."""
     raw = tavily_hotel_search(destination, checkin, checkout)
@@ -176,12 +176,20 @@ def _search_tavily_fallback(
                 HumanMessage(
                     content=(
                         f"Extract hotel information from these search results "
-                        f"for hotels in {destination}:\n\n{raw}"
+                        f"for hotels in {destination}.\n"
+                        f"IMPORTANT: The user has a budget constraint: '{budget}'. Try to pick hotels that fit this budget if possible.\n\n{raw}"
                     )
                 ),
             ]
         )
-        hotels = json.loads(response.content)
+        content = response.content.strip()
+        if content.startswith("```json"):
+            content = content[7:-3]
+        elif content.startswith("```"):
+            content = content[3:-3]
+        content = content.strip()
+        
+        hotels = json.loads(content)
         if not isinstance(hotels, list):
             hotels = []
     except (json.JSONDecodeError, Exception) as exc:
@@ -201,7 +209,7 @@ def _search_tavily_fallback(
 
 
 def search_hotels_structured(
-    destination: str, checkin: str = "", checkout: str = ""
+    destination: str, checkin: str = "", checkout: str = "", budget: str = ""
 ) -> list[dict]:
     """
     Search hotels — tries RapidAPI first, falls back to Tavily.
@@ -210,7 +218,7 @@ def search_hotels_structured(
     hotels = _search_rapidapi(destination, checkin, checkout)
     if not hotels:
         log.info("RapidAPI returned no results, falling back to Tavily")
-        hotels = _search_tavily_fallback(destination, checkin, checkout)
+        hotels = _search_tavily_fallback(destination, checkin, checkout, budget)
     return hotels
 
 
