@@ -46,7 +46,7 @@ function TypeIcon({ type }) {
   return <Hotel size={18} />;
 }
 
-export default function BookingModal({ isOpen, onClose, bookingData, onBooked }) {
+export default function BookingModal({ isOpen, onClose, bookingData, onBooked, tripId }) {
   const [step, setStep] = useState(0);            // 0=Review, 1=Payment, 2=Confirmed
   const [profile, setProfile] = useState(null);     // User profile from API
   const [loading, setLoading] = useState(false);     // Profile fetch spinner
@@ -148,6 +148,7 @@ export default function BookingModal({ isOpen, onClose, bookingData, onBooked })
         method: 'POST',
         headers,
         body: JSON.stringify({
+          trip_id: tripId,
           booking_type: bookingData.bookingType,
           provider_name: bookingData.providerName,
           travel_date: travelDate,

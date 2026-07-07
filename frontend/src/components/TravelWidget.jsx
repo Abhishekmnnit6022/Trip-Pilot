@@ -6,7 +6,7 @@ export default function TravelWidget({ onSubmit, disabled }) {
   const [destination, setDestination] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [travelers, setTravelers] = useState('2');
+  const [travelers, setTravelers] = useState('1');
   const [expanded, setExpanded] = useState(false);
 
   const handleSubmit = (e) => {
@@ -37,7 +37,7 @@ export default function TravelWidget({ onSubmit, disabled }) {
     setDestination('');
     setStartDate('');
     setEndDate('');
-    setTravelers('2');
+    setTravelers('1');
     setExpanded(false);
   };
 

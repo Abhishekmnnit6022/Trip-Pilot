@@ -1257,3 +1257,53 @@ a:hover { text-decoration: underline; }
 .history-item.active { background: rgba(59, 130, 246, 0.15); border-left: 2px solid var(--accent); border-radius: 0 6px 6px 0; }
 .history-title { color: var(--text-primary); font-size: 0.8rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .history-date { color: var(--text-muted); font-size: 0.7rem; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TELEGRAM QR SECTION (SIDEBAR)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.telegram-qr-section {
+  margin-top: auto;
+  margin-bottom: 15px;
+  border-top: 1px solid var(--border);
+  padding-top: 15px;
+}
+.telegram-qr-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+.qr-code-img {
+  width: 120px;
+  height: 120px;
+  border-radius: 8px;
+  padding: 5px;
+  background: white; /* QR needs white bg for contrast */
+}
+.qr-scan-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin: 0;
+}
+.telegram-link-btn {
+  display: inline-block;
+  background: rgba(43, 163, 222, 0.1);
+  color: #2ba3de; /* Telegram blue */
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+.telegram-link-btn:hover {
+  background: #2ba3de;
+  color: #fff;
+}

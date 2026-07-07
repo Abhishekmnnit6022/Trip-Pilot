@@ -36,7 +36,7 @@ export function FlightCard({ flight, onBook }) {
     onBook({
       bookingType: 'flight',
       providerName: flight.airline,
-      travelDate: flight.departure_time ? flight.departure_time.split('T')[0] : '',
+      travelDate: flight.travel_date || (flight.departure_time ? flight.departure_time.split('T')[0] : ''),
       details: {
         airline: flight.airline,
         flight_number: flight.flight_number,
@@ -94,7 +94,7 @@ export function TrainCard({ train, onBook }) {
     onBook({
       bookingType: 'train',
       providerName: train.train_name,
-      travelDate: '',
+      travelDate: train.travel_date || '',
       details: {
         train_name: train.train_name,
         train_number: train.train_number,
