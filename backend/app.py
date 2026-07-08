@@ -234,7 +234,19 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
             "total_estimated_cost": 0,
             "budget_limit": 0,
             "optimization_count": 0,
+            "travel_twin_profile": {},
         }
+        
+        # Fetch and inject Travel Twin profile
+        try:
+            from backend.routes import get_user_client
+            client = get_user_client(user["token"])
+            profile_resp = client.table("user_profiles").select("travel_twin_profile").eq("id", user["user_id"]).execute()
+            if profile_resp.data and profile_resp.data[0].get("travel_twin_profile"):
+                input_state["travel_twin_profile"] = profile_resp.data[0]["travel_twin_profile"]
+        except Exception as e:
+            log.warning("Failed to load travel twin profile into state: %s", e)
+
     else:
         input_state = {
             "messages": [HumanMessage(content=req.message)],

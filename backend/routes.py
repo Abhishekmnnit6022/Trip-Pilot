@@ -79,6 +79,7 @@ class ProfileResponse(BaseModel):
     telegram_chat_id: str = ""
     emergency_contact_name: str = ""
     emergency_contact_phone: str = ""
+    travel_twin_profile: dict = {}
 
 
 class BookingRequest(BaseModel):
@@ -169,6 +170,7 @@ def get_profile(user: dict = Depends(get_current_user)):
                 telegram_chat_id=row.get("telegram_chat_id", ""),
                 emergency_contact_name=row.get("emergency_contact_name", ""),
                 emergency_contact_phone=row.get("emergency_contact_phone", ""),
+                travel_twin_profile=row.get("travel_twin_profile") or {},
             )
         # Profile doesn't exist yet — create one
         client.table("user_profiles").insert({"id": user["user_id"]}).execute()
@@ -221,6 +223,7 @@ def update_profile(body: ProfileUpdate, user: dict = Depends(get_current_user)):
                 telegram_chat_id=row.get("telegram_chat_id", ""),
                 emergency_contact_name=row.get("emergency_contact_name", ""),
                 emergency_contact_phone=row.get("emergency_contact_phone", ""),
+                travel_twin_profile=row.get("travel_twin_profile") or {},
             )
         raise HTTPException(status_code=404, detail="Profile not found")
     except HTTPException:
@@ -298,6 +301,12 @@ def create_booking(body: BookingRequest, user: dict = Depends(get_current_user))
         resp = client.table("bookings").insert(row).execute()
         if resp.data:
             saved = resp.data[0]
+
+            # Update Travel Twin profile in background
+            import threading
+            from backend.twin_agent import run_twin_update_sync
+            event_msg = f"User booked a {body.booking_type} with provider {body.provider_name}. Details: {body.details}"
+            threading.Thread(target=run_twin_update_sync, args=(user["user_id"], event_msg), daemon=True).start()
 
             # Send Telegram notification (fire-and-forget, non-blocking)
             try:

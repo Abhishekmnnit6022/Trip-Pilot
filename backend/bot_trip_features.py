@@ -175,7 +175,7 @@ def _handle_show_itinerary(chat_id: int, message_id: int, trip_id: str, callback
         
         try:
             llm = _get_llm()
-            prompt = f"Generate a short 3-item local activity itinerary checklist for a trip named '{trip_name}'. Focus ONLY on local sightseeing, food, or activities. DO NOT include travel elements like flights, trains, or hotel bookings. Return ONLY valid JSON format as a list of objects with keys 'activity' (string) and 'estimated_cost' (number in INR). Do not include markdown formatting or backticks, just the raw JSON."
+            prompt = f"Generate a short 3-item local activity itinerary checklist for a trip named '{trip_name}'. Focus ONLY on local sightseeing, food, or activities. DO NOT include travel elements like flights, trains, or hotel bookings. Include a mix of paid and free activities. Return ONLY valid JSON format as a list of objects with keys 'activity' (string) and 'estimated_cost' (number in INR, use 0 for free activities). Do not include markdown formatting or backticks, just the raw JSON."
             response = llm.invoke([HumanMessage(content=prompt)])
             
             # Clean response text and parse JSON
@@ -215,11 +215,12 @@ def _render_itinerary_keyboard(chat_id: int, message_id: int, items: list, is_ne
     trip_id = items[0]["trip_id"] if items else ""
     
     for item in items:
+        cost_text = f"(Rs {item['estimated_cost']})" if item['estimated_cost'] > 0 else "(Free)"
         if item["is_completed"]:
-            text = f"✅ {item['activity']} (Rs {item['estimated_cost']})"
+            text = f"✅ {item['activity']} {cost_text}"
             inline_keyboard.append([{"text": text, "callback_data": "noop"}])
         else:
-            text = f"⬜️ {item['activity']} (Rs {item['estimated_cost']})"
+            text = f"⬜️ {item['activity']} {cost_text}"
             inline_keyboard.append([{"text": text, "callback_data": f"toggle_itin:{item['id']}"}])
         
     if trip_id:
@@ -270,15 +271,19 @@ def _handle_toggle_itinerary(chat_id: int, message_id: int, itin_id: str, callba
         # Update state
         _supabase.table("trip_itinerary").update({"is_completed": True}).eq("id", itin_id).execute()
         
-        # Add expense securely via RPC
-        _supabase.rpc("bot_add_trip_expense", {
-            "p_trip_id": item["trip_id"],
-            "p_category": "Activities",
-            "p_description": item["activity"],
-            "p_amount": item["estimated_cost"]
-        }).execute()
-        
-        _answer_callback(callback_id, f"✅ Logged Rs {item['estimated_cost']} to expenses!", show_alert=False)
+        # Add expense securely via RPC only if there is a cost
+        if item.get("estimated_cost", 0) > 0:
+            _supabase.rpc("bot_add_trip_expense", {
+                "p_trip_id": item["trip_id"],
+                "p_category": "Activities",
+                "p_description": item["activity"],
+                "p_amount": item["estimated_cost"]
+            }).execute()
+            
+            _answer_callback(callback_id, f"✅ Logged Rs {item['estimated_cost']} to expenses!", show_alert=False)
+        else:
+            _answer_callback(callback_id, f"✅ Checked off free activity!", show_alert=False)
+            
             
         # Re-render
         resp_all = _supabase.rpc("bot_get_trip_itinerary", {"p_trip_id": item["trip_id"]}).execute()

@@ -225,12 +225,41 @@ def train_agent(state: TravelState) -> dict:
 # 4. HOTEL AGENT
 # ─────────────────────────────────────────────────────────────────────────────
 
+_HOTEL_SYSTEM = """\
+You are the Hotel Booking Agent.
+Find accommodations for the user's trip to {destination}.
+Trip dates: {start_date} to {end_date}
+Budget limit: {budget} (Aim for {budget_limit} INR or lower if specified)
+
+The user's Travel Twin Profile (learned from past bookings) is:
+{travel_twin}
+
+Instructions:
+1. Use the 'search_hotels' tool to fetch hotel results from Booking.com.
+2. IMPORTANT: Incorporate the user's Travel Twin preferences (e.g. hotel_preference_stars) when selecting the best hotels to display.
+3. Your output MUST be ONLY valid JSON matching this schema:
+[
+  {{"hotel_name": "...", "rating": 4.5, "price_per_night": 5000, "total_price": 10000, "booking_url": "...", "image_url": "..."}}
+]
+4. Return a maximum of 3 hotels. Sort them to balance the user's budget and their Travel Twin star preference.
+5. Do NOT wrap the JSON in markdown code blocks. Start directly with `[` and end with `]`.
+"""
+
 def hotel_agent(state: TravelState) -> dict:
     """Search hotels at the destination."""
     destination = state.get("destination", "")
     checkin = state.get("start_date", "")
     checkout = state.get("end_date", "")
     budget = state.get("budget", "")
+
+    system_prompt = _HOTEL_SYSTEM.format(
+        destination=destination,
+        start_date=checkin,
+        end_date=checkout,
+        budget=budget,
+        budget_limit=state.get("budget_limit", 0),
+        travel_twin=json.dumps(state.get("travel_twin_profile", {}), indent=2)
+    )
 
     log.info("Searching hotels in %s (%s to %s) with budget: %s", destination, checkin, checkout, budget)
     hotels = search_hotels_structured(destination, checkin, checkout, budget)
@@ -291,7 +320,8 @@ def present_results(state: TravelState) -> dict:
     destination = state.get("destination", "your destination")
 
     parts = [
-        f"Here are the best travel options I found for your trip to **{destination}**! 🎉\n"
+        f"Here are the best travel options I found for your trip to **{destination}**! 🎉\n",
+        f"*(🧠 Personalized using your Travel Twin profile)*\n"
     ]
 
     if flights:
@@ -327,7 +357,7 @@ def itinerary_agent(state: TravelState) -> dict:
     num_days = state.get("num_days", 0) or 3
     start_date = state.get("start_date", "")
     end_date = state.get("end_date", "")
-    budget = state.get("budget", "")
+    
     flights_text = format_flights_text(
         json.loads(state.get("flight_results", "[]") or "[]")
     )
@@ -346,39 +376,30 @@ def itinerary_agent(state: TravelState) -> dict:
     weather_text = weather_data.get("summary", "Weather data unavailable.")
 
     prompt = f"""\
-Create a detailed {num_days}-day travel itinerary for a trip from {origin} to {destination}.
-Start date: {start_date}
-Budget: {budget or "flexible"}
+You are the Expert Itinerary Planner.
+You have the following confirmed details for a trip to {destination}:
+- Dates: {start_date} to {end_date} ({num_days} days)
+- Flights: {flights_text}
+- Trains: {trains_text}
+- Hotels: {hotels_text}
 
-Available Transport:
-{flights_text}
+The user's Travel Twin Profile (learned from past behavior) is:
+{json.dumps(state.get("travel_twin_profile", {}), indent=2)}
 
-{trains_text}
-
-Available Hotels:
-{hotels_text}
-
-Tourist Attractions & Things To Do:
-{attractions}
-
-Weather Forecast:
+7-Day Weather Forecast for {destination}:
 {weather_text}
 
-Please create a day-by-day itinerary with:
-- Morning, afternoon, and evening activities
-- Suggested transport and hotel from the options above
-- Weather-appropriate activity suggestions
-- Estimated costs where possible
-- Local food recommendations
-- Practical tips based on the weather
-
-Format each day clearly with a heading like "## Day 1: [date] — [theme]"
-At the end, include a section "## 🌤️ Weather Summary" with the forecast.
+Instructions:
+1. Generate a day-by-day itinerary.
+2. IMPORTANT: Tailor the activities to match the user's Travel Twin (e.g., if 'early_mornings' is 'low', start activities later. If 'walking_tolerance' is 'low', suggest cabs).
+3. If weather indicates rain on a specific day, suggest indoor activities.
+4. Format using clean Markdown with day headers (e.g., ### Day 1: Arrival & Exploration).
+5. Output ONLY the itinerary text. No intro/outro.
 """
 
     response = llm.invoke(
         [
-            SystemMessage(content="You are an expert travel planner who creates detailed, practical itineraries. Factor in weather conditions for activity planning."),
+            SystemMessage(content="You are an expert travel planner who creates detailed, practical itineraries."),
             HumanMessage(content=prompt),
         ]
     )
@@ -414,6 +435,9 @@ from {origin} to {destination}.
 Itinerary:
 {itinerary}
 
+User's Travel Twin Profile (learned from past behavior):
+{json.dumps(state.get("travel_twin_profile", {}), indent=2)}
+
 Weather Forecast:
 {weather_text}
 
@@ -423,6 +447,7 @@ Please provide:
 3. 🧳 **Compact Packing Checklist** — A very short, COMPACT, weather-appropriate packing list. Only include the most essential 5-10 items. DO NOT provide long detailed categories. Keep it brief.
 4. Important travel tips
 5. Emergency contacts / useful info for {destination}
+6. 🧠 **Travel Twin Personalization** — Briefly explain (2-3 sentences) how this itinerary was tailored to the user's learned habits (e.g., budget sensitivity, walking tolerance, early mornings).
 
 Keep it well-organized with clear headings and bullet points.
 """
@@ -575,6 +600,9 @@ Flights: {flights}
 Trains: {trains}
 Hotels: {hotels}
 
+The user's Travel Twin Profile is:
+{travel_twin}
+
 OPTIMIZATION STRATEGIES (apply in order):
 1. Replace flights with trains (saves 40-60%)
 2. Replace luxury/5-star hotels with budget/3-star hotels (saves 50-70%)
@@ -595,14 +623,6 @@ Respond with ONLY valid JSON (no markdown):
 def budget_optimizer_node(state: TravelState) -> dict:
     """
     Autonomously optimize the trip to fit within the user's budget.
-    
-    This node is triggered when the budget_check_node determines that
-    total_estimated_cost > budget_limit. It instructs the LLM to find
-    cheaper alternatives (swap flights for trains, 5-star for 3-star, etc.)
-    and generates a new optimized itinerary.
-    
-    The optimization_count is incremented to prevent infinite loops (max 2).
-    After optimization, the pipeline re-enters the itinerary flow.
     """
     total_cost = state.get("total_estimated_cost", 0)
     budget_limit = state.get("budget_limit", 0)
@@ -612,7 +632,7 @@ def budget_optimizer_node(state: TravelState) -> dict:
     flights_text = state.get("flight_results", "[]")
     trains_text = state.get("train_results", "[]")
     hotels_text = state.get("hotel_results", "[]")
-
+    
     log.info(
         "[BudgetOptimizer] Optimizing trip (attempt #%d): ₹%d → ₹%d (overshoot: ₹%d)",
         optimization_count + 1, total_cost, budget_limit, overshoot,
@@ -626,6 +646,7 @@ def budget_optimizer_node(state: TravelState) -> dict:
         flights=flights_text,
         trains=trains_text,
         hotels=hotels_text,
+        travel_twin=json.dumps(state.get("travel_twin_profile", {}), indent=2)
     )
 
     try:

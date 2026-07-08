@@ -54,3 +54,4 @@ class TravelState(TypedDict):
     total_estimated_cost: int    # Budget optimizer: estimated total cost in INR
     budget_limit: int            # Budget optimizer: user's max budget in INR
     optimization_count: int      # Budget optimizer: loop counter (max 2)
+    travel_twin_profile: dict    # User's learned travel twin profile
