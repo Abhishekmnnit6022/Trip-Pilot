@@ -25,7 +25,9 @@ export default function ProfileModal({ isOpen, onClose }) {
     travel_preferences: {},
     emergency_contact_name: '',
     emergency_contact_phone: '',
+    travel_twin_profile: null,
   });
+  const [activeTab, setActiveTab] = useState('basic'); // 'basic' | 'twin'
   const [telegramChatId, setTelegramChatId] = useState('');
   const [telegramLinked, setTelegramLinked] = useState(false);
   const [botUsername, setBotUsername] = useState('');
@@ -62,6 +64,7 @@ export default function ProfileModal({ isOpen, onClose }) {
           travel_preferences: data.travel_preferences || {},
           emergency_contact_name: data.emergency_contact_name || '',
           emergency_contact_phone: data.emergency_contact_phone || '',
+          travel_twin_profile: data.travel_twin_profile || null,
         });
         if (data.telegram_chat_id) {
           setTelegramChatId(data.telegram_chat_id);
@@ -137,12 +140,17 @@ export default function ProfileModal({ isOpen, onClose }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content profile-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>My Profile</h2>
-          <button className="modal-close" onClick={onClose}>
-            <X size={20} />
-          </button>
+      <div className="auth-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px', padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+        <div className="auth-header" style={{ margin: 0, padding: '2rem 2.5rem 1rem', borderBottom: '1px solid var(--border)' }}>
+          <h2 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>Edit Profile</span>
+            <button className="close-btn" onClick={onClose}><X size={20} /></button>
+          </h2>
+          
+          <div className="profile-tabs">
+            <button className={`tab-btn ${activeTab === 'basic' ? 'active' : ''}`} onClick={() => setActiveTab('basic')}>Basic Info</button>
+            <button className={`tab-btn ${activeTab === 'twin' ? 'active' : ''}`} onClick={() => setActiveTab('twin')}>🧠 My Travel Twin</button>
+          </div>
         </div>
 
         {loading ? (
@@ -151,8 +159,11 @@ export default function ProfileModal({ isOpen, onClose }) {
             <span>Loading profile…</span>
           </div>
         ) : (
-          <div className="modal-body">
-            {/* Full Name */}
+          <div className="modal-body" style={{ padding: '2rem 2.5rem', overflowY: 'auto' }}>
+            
+            {activeTab === 'basic' && (
+              <>
+                {/* Full Name */}
             <div className="profile-field">
               <label><User size={16} /> Full Name</label>
               <input
@@ -277,9 +288,83 @@ export default function ProfileModal({ isOpen, onClose }) {
                 </>
               )}
             </div>
+            </>
+            )}
+
+            {activeTab === 'twin' && (
+              <div className="travel-twin-dashboard">
+                <p className="twin-intro">
+                  TripPilot autonomously learns your travel habits from your bookings to build a highly personalized profile.
+                </p>
+                
+                {profile.travel_twin_profile ? (
+                  <>
+                    <div className="twin-metrics">
+                      <div className="twin-metric">
+                        <div className="metric-header">
+                          <span>Budget Sensitivity</span>
+                          <span>{profile.travel_twin_profile.budget_sensitivity}/100</span>
+                        </div>
+                        <div className="metric-bar-bg">
+                          <div className="metric-bar-fill" style={{ width: `${profile.travel_twin_profile.budget_sensitivity}%` }}></div>
+                        </div>
+                      </div>
+
+                      <div className="twin-metric">
+                        <div className="metric-header">
+                          <span>Hotel Preference</span>
+                          <span>{profile.travel_twin_profile.hotel_preference_stars} ⭐</span>
+                        </div>
+                        <div className="metric-bar-bg">
+                          <div className="metric-bar-fill" style={{ width: `${(profile.travel_twin_profile.hotel_preference_stars / 5) * 100}%`, background: 'var(--orange)' }}></div>
+                        </div>
+                      </div>
+                      
+                      <div className="twin-grid">
+                        <div className="twin-stat-box">
+                          <span className="stat-label">Walking</span>
+                          <span className="stat-value" style={{textTransform:'capitalize'}}>{profile.travel_twin_profile.walking_tolerance}</span>
+                        </div>
+                        <div className="twin-stat-box">
+                          <span className="stat-label">Adventure</span>
+                          <span className="stat-value" style={{textTransform:'capitalize'}}>{profile.travel_twin_profile.adventure_preference}</span>
+                        </div>
+                        <div className="twin-stat-box">
+                          <span className="stat-label">Early Mornings</span>
+                          <span className="stat-value" style={{textTransform:'capitalize'}}>{profile.travel_twin_profile.early_mornings}</span>
+                        </div>
+                        <div className="twin-stat-box">
+                          <span className="stat-label">Food</span>
+                          <span className="stat-value" style={{textTransform:'capitalize'}}>{profile.travel_twin_profile.food_preference}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="twin-insights">
+                      <h4>✨ AI Insights</h4>
+                      {profile.travel_twin_profile.insights?.length > 0 ? (
+                        <ul>
+                          {profile.travel_twin_profile.insights.map((ins, i) => (
+                            <li key={i}>{ins}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="no-insights">No insights yet. Make some bookings to teach the AI!</p>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="twin-empty">
+                    <Loader2 size={24} className="spin" style={{margin:'0 auto 10px'}}/>
+                    <p>Generating your Travel Twin...</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Save Button */}
-            <button className="btn-primary" onClick={handleSave} disabled={saving}>
+            <div style={{ marginTop: '2rem' }}>
+              <button className="btn-primary" onClick={handleSave} disabled={saving}>
               {saving ? (
                 <><Loader2 size={18} className="spin" /> Saving…</>
               ) : saved ? (
@@ -288,6 +373,7 @@ export default function ProfileModal({ isOpen, onClose }) {
                 <><Save size={18} /> Save Profile</>
               )}
             </button>
+            </div>
           </div>
         )}
       </div>

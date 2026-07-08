@@ -175,3 +175,30 @@ This phase transforms the bot from a passive booking viewer into an active, on-t
 - **Form UI Default Optimization**: Adjusted the Web UI's Travel Widget to default to exactly 1 traveler, improving the baseline user experience.
 
 **Status**: TripPilot is a production-hardened, omnichannel AI Travel Platform with premium UI, secure multi-device Telegram integration, interactive booking flow (Stripe), AI Budget Auto-Optimization, interactive expense tracking, dynamic PDF generation, and an emergency SOS system.
+
+---
+
+## Phase 9: "Travel Twin" AI Personalization & Observer Agent
+**Goal:** Evolve the AI from a static assistant into a continuous learner that adapts travel recommendations based on historical user behavior.
+
+### 9A. Travel Twin Profile & Background Observer
+- **Persistent Intelligence (`travel_twin_profile`)**: Extended the `user_profiles` database table with a new JSONB column to permanently store dynamic behavioral metrics (Budget Sensitivity, Hotel Preference Stars, Walking Tolerance, Adventure Preference, Early Mornings, Night Travel, Food Preference) and an array of AI Insights.
+- **Asynchronous AI Observer (`twin_agent.py`)**: Developed a dedicated background AI observer. Whenever a user initiates a booking event, a non-blocking background thread captures the transaction data and passes it to the `llama-3.3-70b-versatile` model. 
+- **Continuous Learning Loop**: The AI analyzes the booking (e.g., spending ₹45k on a 5-star hotel) and autonomously updates the user's twin profile (e.g., dropping budget sensitivity, increasing hotel stars, adding an insight: *"User is willing to splurge on luxury accommodations"*).
+- **Secure RPC Update (`bot_update_travel_twin`)**: Designed custom Supabase RPCs to allow the background background worker to safely read and write twin data by bypassing Row Level Security.
+
+### 9B. LangGraph Context Injection
+- **Graph State Integration**: Added the `travel_twin_profile` directly into the LangGraph `TravelState`. The profile is fetched at session initiation and injected as global context across the entire agentic pipeline.
+- **Personalized Agent Execution (`nodes.py`)**: 
+  - The `hotel_agent` cross-references available properties against the twin's `hotel_preference_stars`.
+  - The `itinerary_agent` alters the pacing of its generated day-to-day schedule based on `early_mornings` and `walking_tolerance` parameters.
+  - The `final_agent` adds a dedicated `🧠 Travel Twin Personalization` paragraph explaining exactly *why* the AI made those tailored choices.
+
+### 9C. Professional Visualizer Dashboard
+- **Profile Modal Overhaul (`ProfileModal.jsx`)**: Rebuilt the frontend User Profile view with a modern tabbed layout.
+- **My Travel Twin UI**: Added a dedicated `🧠 My Travel Twin` tab showcasing a premium, glassmorphism dashboard.
+- **Visual Analytics**: The dashboard maps the raw JSON data to interactive progress bars (for Budget and Star Ratings) and neatly styled stat grids (for Adventure and Walking limits), alongside a live feed of AI Insights.
+
+### 9D. Telegram Smart Itinerary Enhancements
+- **Free/Paid Activity Mix**: Modified the Telegram bot's itinerary LLM prompt to intentionally generate a mix of paid and free local activities, setting `estimated_cost` to `0` for free items.
+- **Smart Expense Routing (`bot_trip_features.py`)**: When users check off an itinerary item in Telegram, the system intelligently checks the cost. If it's a paid activity, it executes the expense logging RPC. If it's free, it simply checks it off without artificially inflating the trip's expense report with zero-value line items.

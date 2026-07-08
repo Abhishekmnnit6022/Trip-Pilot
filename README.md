@@ -10,6 +10,7 @@ TripPilot is a state-of-the-art, enterprise-grade AI travel platform. Built on L
 
 ### 🧠 Agentic AI Architecture (LangGraph)
 - **Multi-Agent System:** Dedicated specialized agents for routing, flights, trains, hotels, and itinerary generation (powered by `Llama-3.3-70b-versatile` via Groq).
+- **Travel Twin (Continuous Learning):** A background AI observer constantly monitors user booking behavior (e.g. tracking budget limits and star-rating preferences). It dynamically constructs a "Travel Twin" profile and injects this persistent context into all future LangGraph sessions for hyper-personalized itineraries.
 - **Autonomous Budget Optimization (Cyclic Graph):** If your requested trip exceeds your budget, the AI intercepts the flow, iteratively drops luxury hotels for budget ones, swaps flights for trains, and automatically recalculates until the budget is met.
 - **Fallback Intelligence:** If a third-party API is down, a custom Thread-Safe Circuit Breaker kicks in, allowing the AI to seamlessly fallback to real-time Web Search (Tavily) without crashing.
 
@@ -25,10 +26,12 @@ TripPilot is a state-of-the-art, enterprise-grade AI travel platform. Built on L
   - The bot instantly generates a dynamic **Google Maps Live Location** link.
   - The backend bypasses database row-level security to extract the user's emergency contact.
   - A real-time **Emergency SMS** is fired to their loved ones via the **Fast2SMS API** containing their live location, ensuring safety even in low-bandwidth travel areas.
-- **On-Trip Expense & Itinerary Tracking:** The bot serves as an active companion during your trip. It turns your AI-generated itinerary into an interactive checklist. As you tap to check off completed activities, the bot securely logs your real-world expenses on the go.
+- **On-Trip Expense & Itinerary Tracking:** The bot serves as an active companion during your trip. It turns your AI-generated itinerary into an interactive checklist containing both paid and free local activities. 
+- **Smart Expense Routing:** As you tap to check off completed activities on Telegram, the bot analyzes the activity type. If it's a paid activity, it securely logs your real-world expenses on the go. If it's a free activity, it checks it off without inflating your expense report!
 - **Dynamic PDF Reporting:** Clicking "End Trip" triggers a background process that compiles all your pre-trip bookings and on-trip custom expenses into a beautifully styled, final PDF Expense Report. This invoice is instantly delivered to your Telegram chat.
 
 ### 💾 Persistent Memory & Cloud Sync
+- **My Travel Twin Dashboard:** A premium, glassmorphism visualizer in the frontend that dynamically renders your AI-learned habits (budget sensitivity bars, hotel star trackers, walking/adventure tolerance grids) and a live feed of AI Insights.
 - **Chat History Sidebar:** Just like ChatGPT, all previous AI travel sessions are saved to Supabase and can be clicked to resume your context instantly.
 - **Profile Management:** Secure user profiles managed via Supabase JWT Authentication.
 
