@@ -68,7 +68,7 @@ def _resolve_destination(destination: str) -> tuple[str, str] | None:
 
 
 def _search_rapidapi(
-    destination: str, checkin: str, checkout: str
+    destination: str, checkin: str, checkout: str, budget: str = ""
 ) -> list[dict]:
     """Search hotels via RapidAPI Booking.com endpoint."""
     if not RAPIDAPI_KEY:
@@ -95,6 +95,10 @@ def _search_rapidapi(
         "languagecode": "en-us",
         "currency_code": "INR",
     }
+    
+    # If budget indicates cheap/economy, explicitly ask RapidAPI to sort by price
+    if budget and any(w in budget.lower() for w in ["cheap", "budget", "low", "economy", "affordable"]):
+        params["order_by"] = "price"
 
     try:
         resp = requests.get(SEARCH_URL, headers=_rapidapi_headers(), params=params, timeout=15)
@@ -215,7 +219,7 @@ def search_hotels_structured(
     Search hotels — tries RapidAPI first, falls back to Tavily.
     Returns a list of hotel dicts.
     """
-    hotels = _search_rapidapi(destination, checkin, checkout)
+    hotels = _search_rapidapi(destination, checkin, checkout, budget)
     if not hotels:
         log.info("RapidAPI returned no results, falling back to Tavily")
         hotels = _search_tavily_fallback(destination, checkin, checkout, budget)
