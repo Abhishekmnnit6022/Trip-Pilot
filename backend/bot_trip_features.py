@@ -20,15 +20,59 @@ def _get_llm():
 def handle_my_trips(chat_id: int, user_id: str):
     """Show active trips to select as context."""
     try:
-        resp = _supabase.rpc("bot_get_active_trips", {"p_user_id": user_id}).execute()
-        trips = resp.data or []
+        # Fetch all active trips for user
+        trips_resp = _supabase.table("trips").select("*").eq("user_id", user_id).eq("status", "active").execute()
+        all_trips = trips_resp.data or []
+        
+        # Fetch all bookings for user to see which trips actually have bookings
+        bookings_resp = _supabase.table("bookings").select("trip_id, booking_type, details").eq("user_id", user_id).execute()
+        bookings = bookings_resp.data or []
+        
+        booked_trip_ids = set()
+        trip_dests = {}
+        
+        for b in bookings:
+            tid = b.get("trip_id")
+            if tid:
+                booked_trip_ids.add(tid)
+                # Try to extract destination for naming
+                det = b.get("details") or {}
+                dest = None
+                if b["booking_type"] == "flight":
+                    dest = det.get("arrival_airport")
+                elif b["booking_type"] == "train":
+                    dest = det.get("arrival_station")
+                
+                if dest and tid not in trip_dests:
+                    # Clean up destination name (e.g. "Goa International" -> "Goa")
+                    dest_clean = dest.split(" International")[0].split(" Airport")[0].split(" Junction")[0].strip()
+                    trip_dests[tid] = f"Trip: {dest_clean}"
+
+        # Filter trips to ONLY those that have bookings
+        valid_trips = []
+        for t in all_trips:
+            if t["id"] in booked_trip_ids:
+                # Rename strictly to destination if available
+                new_name = trip_dests.get(t["id"])
+                if new_name and t["name"] != new_name:
+                    _supabase.table("trips").update({"name": new_name}).eq("id", t["id"]).execute()
+                    t["name"] = new_name
+                elif not t["name"].startswith("Trip:"):
+                    new_name = "Trip: Planned Destination"
+                    _supabase.table("trips").update({"name": new_name}).eq("id", t["id"]).execute()
+                    t["name"] = new_name
+                    
+                valid_trips.append(t)
+                
+        trips = valid_trips
+
     except Exception as exc:
         log.error("Failed to fetch active trips: %s", exc)
         send_message(chat_id, "❌ Could not fetch your trips.")
         return
 
     if not trips:
-        send_message(chat_id, "You don't have any active trips planned right now.")
+        send_message(chat_id, "You don't have any booked trips right now. Plan and book a trip on the web app first!")
         return
 
     # Create inline keyboard for trips
