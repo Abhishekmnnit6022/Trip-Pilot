@@ -36,3 +36,6 @@ STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", "").strip()
 # ── LLM ──────────────────────────────────────────────────────────────────────
 LLM_MODEL: str = "llama-3.3-70b-versatile"
 
+# ── Frontend ─────────────────────────────────────────────────────────────────
+FRONTEND_URL: str = os.getenv("FRONTEND_URL", "").strip()
+

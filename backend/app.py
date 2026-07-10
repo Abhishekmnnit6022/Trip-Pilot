@@ -24,6 +24,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from backend.auth import get_current_user
 from backend.agents.graph import compile_app
 from backend.routes import router as profile_booking_router
+from backend.config import FRONTEND_URL
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(name)s  %(message)s")
@@ -83,7 +84,7 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-    ],
+    ] + ([FRONTEND_URL] if FRONTEND_URL else []),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
