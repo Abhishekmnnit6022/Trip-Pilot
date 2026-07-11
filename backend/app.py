@@ -107,6 +107,7 @@ class NewSessionResponse(BaseModel):
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
+@app.get("/")
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "pipeline": _compiled_app is not None}

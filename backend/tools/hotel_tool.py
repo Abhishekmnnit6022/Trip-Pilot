@@ -169,7 +169,7 @@ def _search_tavily_fallback(
     destination: str, checkin: str, checkout: str, budget: str = ""
 ) -> list[dict]:
     """Fallback: search hotels via Tavily + LLM parsing."""
-    raw = tavily_hotel_search(destination, checkin, checkout)
+    raw = tavily_hotel_search(destination, checkin, checkout, budget)
     if not raw or raw == "No results found.":
         return []
 

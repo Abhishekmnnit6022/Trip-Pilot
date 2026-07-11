@@ -492,8 +492,8 @@ def handle_message(message: dict) -> None:
 
         # Fetch active trips
         try:
-            resp = _supabase.rpc("bot_get_active_trips", {"p_user_id": user_id}).execute()
-            trips = resp.data or []
+            from backend.bot_trip_features import get_booked_trips_for_bot
+            trips = get_booked_trips_for_bot(user_id)
         except Exception as exc:
             log.error("Failed to fetch active trips: %s", exc)
             send_message(chat_id, "❌ Could not fetch your trips. Please try again.")
@@ -619,6 +619,18 @@ def handle_message(message: dict) -> None:
     if user_id and text == "/menu":
         send_message(chat_id, "Here is your menu:", _get_main_menu_keyboard())
         return
+
+    if text == "🌍 Plan New Trip":
+        send_message(
+            chat_id,
+            "🌍 <b>Ready to plan your next adventure?</b>\n\n"
+            "TripPilot's powerful AI agents handle flight mapping, train schedules, and hotel booking seamlessly.\n\n"
+            "👉 <b>Open the Web Dashboard to start:</b>\n"
+            "https://trip-pilot-0h4x.onrender.com\n\n"
+            "<i>(Once your trip is created, you can track expenses and manage it right here!)</i>",
+            _get_main_menu_keyboard()
+        )
+        return
         
     if user_id and not (chat_id in LINK_STATE or chat_id in EC_STATE or chat_id in SOS_STATE or chat_id in TRIP_END_STATE):
         # Fallback: check if the user has an active trip and this is an ad-hoc expense
@@ -663,10 +675,10 @@ def poll_telegram_forever() -> None:
                 for update in updates:
                     offset = update["update_id"] + 1
                     if "message" in update:
-                        handle_message(update["message"])
+                        threading.Thread(target=handle_message, args=(update["message"],), daemon=True).start()
                     elif "callback_query" in update:
                         from backend.bot_trip_features import handle_callback_query
-                        handle_callback_query(update["callback_query"])
+                        threading.Thread(target=handle_callback_query, args=(update["callback_query"],), daemon=True).start()
             else:
                 log.error("Telegram API Error: %s", resp.text)
                 time.sleep(5)

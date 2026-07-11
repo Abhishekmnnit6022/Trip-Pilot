@@ -17,16 +17,21 @@ from langchain_core.messages import HumanMessage
 def _get_llm():
     return ChatGroq(model="llama-3.1-8b-instant", temperature=0.2)
 
-def handle_my_trips(chat_id: int, user_id: str):
-    """Show active trips to select as context."""
+def get_booked_trips_for_bot(user_id: str) -> list[dict]:
+    """Fetch ONLY active trips that have bookings, renaming them dynamically."""
+    import psycopg
+    from psycopg.rows import dict_row
     try:
-        # Fetch all active trips for user
-        trips_resp = _supabase.table("trips").select("*").eq("user_id", user_id).eq("status", "active").execute()
-        all_trips = trips_resp.data or []
+        conn = psycopg.connect(os.getenv("SUPABASE_DB_URL"), row_factory=dict_row)
+        cur = conn.cursor()
         
-        # Fetch all bookings for user to see which trips actually have bookings
-        bookings_resp = _supabase.table("bookings").select("trip_id, booking_type, details").eq("user_id", user_id).execute()
-        bookings = bookings_resp.data or []
+        # 1. Fetch all active trips
+        cur.execute("SELECT id, name, status FROM trips WHERE user_id = %s AND status = 'active'", (user_id,))
+        all_trips = cur.fetchall()
+        
+        # 2. Fetch all bookings
+        cur.execute("SELECT trip_id, booking_type, details FROM bookings WHERE user_id = %s", (user_id,))
+        bookings = cur.fetchall()
         
         booked_trip_ids = set()
         trip_dests = {}
@@ -35,42 +40,47 @@ def handle_my_trips(chat_id: int, user_id: str):
             tid = b.get("trip_id")
             if tid:
                 booked_trip_ids.add(tid)
-                # Try to extract destination for naming
                 det = b.get("details") or {}
                 dest = None
                 if b["booking_type"] == "flight":
                     dest = det.get("arrival_airport")
                 elif b["booking_type"] == "train":
                     dest = det.get("arrival_station")
-                
+                elif b["booking_type"] == "hotel":
+                    dest = det.get("name")
+                    
                 if dest and tid not in trip_dests:
-                    # Clean up destination name (e.g. "Goa International" -> "Goa")
-                    dest_clean = dest.split(" International")[0].split(" Airport")[0].split(" Junction")[0].strip()
+                    dest_clean = str(dest).split(" International")[0].split(" Airport")[0].split(" Junction")[0].strip()
                     trip_dests[tid] = f"Trip: {dest_clean}"
-
-        # Filter trips to ONLY those that have bookings
+        
+        # Filter and rename
         valid_trips = []
         for t in all_trips:
             if t["id"] in booked_trip_ids:
-                # Rename strictly to destination if available
                 new_name = trip_dests.get(t["id"])
-                if new_name and t["name"] != new_name:
-                    _supabase.table("trips").update({"name": new_name}).eq("id", t["id"]).execute()
-                    t["name"] = new_name
-                elif not t["name"].startswith("Trip:"):
+                # We need to make sure t is mutable dictionary (RealDictRow is dict-like)
+                t_dict = dict(t)
+                if new_name and t_dict["name"] != new_name:
+                    cur.execute("UPDATE trips SET name = %s WHERE id = %s", (new_name, t_dict["id"]))
+                    t_dict["name"] = new_name
+                elif not str(t_dict["name"]).startswith("Trip:"):
                     new_name = "Trip: Planned Destination"
-                    _supabase.table("trips").update({"name": new_name}).eq("id", t["id"]).execute()
-                    t["name"] = new_name
-                    
-                valid_trips.append(t)
+                    cur.execute("UPDATE trips SET name = %s WHERE id = %s", (new_name, t_dict["id"]))
+                    t_dict["name"] = new_name
                 
-        trips = valid_trips
-
+                valid_trips.append(t_dict)
+                
+        conn.commit()
+        cur.close()
+        conn.close()
+        return valid_trips
     except Exception as exc:
-        log.error("Failed to fetch active trips: %s", exc)
-        send_message(chat_id, "❌ Could not fetch your trips.")
-        return
+        log.error("Failed to fetch booked trips via Postgres: %s", exc)
+        return []
 
+def handle_my_trips(chat_id: int, user_id: str):
+    """Show active trips to select as context."""
+    trips = get_booked_trips_for_bot(user_id)
     if not trips:
         send_message(chat_id, "You don't have any booked trips right now. Plan and book a trip on the web app first!")
         return

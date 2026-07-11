@@ -55,11 +55,12 @@ def search_trains(origin: str, destination: str, date: str = "") -> str:
     return tavily_search(query, max_results=5)
 
 
-def search_hotels(destination: str, checkin: str = "", checkout: str = "") -> str:
+def search_hotels(destination: str, checkin: str = "", checkout: str = "", budget: str = "") -> str:
     """Search for hotels at a destination using Tavily."""
     dates_part = f" checkin {checkin} checkout {checkout}" if checkin else ""
+    budget_term = "budget affordable cheap" if budget and any(w in budget.lower() for w in ["cheap", "budget", "low", "economy"]) else "best"
     query = (
-        f"best hotels in {destination}{dates_part} "
+        f"{budget_term} hotels in {destination}{dates_part} "
         f"price rating reviews "
         f"site:booking.com OR site:makemytrip.com OR site:goibibo.com"
     )

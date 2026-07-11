@@ -46,11 +46,11 @@ class TripReport(FPDF):
         else:
             self._render_text_fallback()
 
-        # Right-side tagline (always shown, positioned to the right)
+        # Tagline below logo
         self.set_font("Helvetica", "I", 9)
         self.set_text_color(120, 140, 155)
-        self.set_xy(120, 30)
-        self.cell(80, 8, "AI-Powered Travel Planning", align="R")
+        self.set_xy(12, 36)
+        self.cell(80, 8, "AI-Powered Travel Planning", align="L")
 
         self.ln(35)
         
@@ -80,11 +80,11 @@ class TripReport(FPDF):
 
 def _safe_price(details: dict) -> float:
     """Extract a numeric price from a booking details dict."""
-    price = details.get("price", 0)
+    price = details.get("amount_paid") or details.get("price") or 0
     if isinstance(price, (int, float)):
         return float(price)
     if isinstance(price, str):
-        cleaned = price.replace(",", "").replace("₹", "").replace("INR", "").strip()
+        cleaned = price.replace(",", "").replace("₹", "").replace("Rs", "").replace("INR", "").strip()
         try:
             return float(cleaned)
         except ValueError:
@@ -318,9 +318,9 @@ def generate_trip_report(
     pdf.set_font("Helvetica", "B", 14)
     pdf.set_fill_color(15, 23, 42)
     pdf.set_text_color(255, 255, 255)
-    pdf.cell(170, 12, "GRAND TOTAL TRIP COST  ", border=0, fill=True, align="R")
+    pdf.cell(150, 12, "GRAND TOTAL TRIP COST  ", border=0, fill=True, align="R")
     pdf.set_text_color(56, 189, 248) # Sky blue text for the grand total
-    pdf.cell(0, 12, f"Rs.{total_cost:,.0f}  ", border=0, fill=True, align="R")
+    pdf.cell(40, 12, f"Rs.{total_cost:,.0f}  ", border=0, fill=True, align="R")
     pdf.ln(15)
 
     # ── Category Breakdown ────────────────────────────────────────────────
