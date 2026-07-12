@@ -57,7 +57,7 @@ export default function AuthPage() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-header">
-          <img src="/logo.png" alt="TripPilot Logo" className="auth-logo-img" style={{ width: '180px', height: 'auto', objectFit: 'contain', margin: '0 auto 1.5rem', display: 'block', filter: 'invert(1) hue-rotate(180deg) brightness(1.5) drop-shadow(0 0 10px rgba(59, 130, 246, 0.4))' }} />
+          <img src="/logo.png" alt="TripPilot Logo" className="auth-logo-img" style={{ width: '220px', height: 'auto', objectFit: 'contain', margin: '0 auto 1.5rem', display: 'block', filter: 'brightness(0) invert(1)' }} />
           <h1>{isLogin ? 'Welcome Back' : 'Create Account'}</h1>
           <p>{isLogin ? 'Sign in to plan your next adventure' : 'Start planning amazing trips'}</p>
         </div>
@@ -98,10 +98,12 @@ export default function AuthPage() {
               minLength={6}
             />
           </div>
-          <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Please wait…' : isLogin ? 'Sign In' : 'Create Account'}
-            {!loading && <ArrowRight size={18} />}
-          </button>
+          <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginTop: '1rem' }}>
+            <button type="submit" className="btn-primary" disabled={loading}>
+              {loading ? 'Please wait…' : isLogin ? 'Sign In' : 'Create Account'}
+              {!loading && <ArrowRight size={18} />}
+            </button>
+          </div>
         </form>
 
         <div className="auth-divider">

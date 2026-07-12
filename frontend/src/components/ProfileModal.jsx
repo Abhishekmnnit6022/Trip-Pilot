@@ -363,7 +363,7 @@ export default function ProfileModal({ isOpen, onClose }) {
             )}
 
             {/* Save Button */}
-            <div style={{ marginTop: '2rem' }}>
+            <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', width: '100%' }}>
               <button className="btn-primary" onClick={handleSave} disabled={saving}>
               {saving ? (
                 <><Loader2 size={18} className="spin" /> Saving…</>

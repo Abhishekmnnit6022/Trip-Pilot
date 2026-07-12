@@ -526,7 +526,7 @@ export default function ChatPage() {
                 transition={{ duration: 0.5 }}
               >
                 <div className="welcome-logo">
-                  <img src="/logo.png" alt="TripPilot" style={{ width: '220px', height: 'auto', filter: 'invert(1) hue-rotate(180deg) brightness(1.5) drop-shadow(0 0 20px rgba(59, 130, 246, 0.4))' }} />
+                  <img src="/logo.png" alt="TripPilot" style={{ width: '220px', height: 'auto' }} />
                 </div>
                 <h2>Where would you like to go? 🌍</h2>
                 <p>Describe your dream trip and I'll handle the rest — flights, trains, hotels, and a complete itinerary.</p>

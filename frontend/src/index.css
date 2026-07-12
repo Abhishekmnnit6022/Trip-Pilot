@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1459,3 +1460,228 @@ a:hover { text-decoration: underline; }
   gap: 1rem;
 }
 
+/* SAAS THEME INJECTED - DARK */
+/* 
+  TRIPPILOT PREMIUM SAAS THEME OVERRIDES 
+  Premium Dark Zinc Theme (Not standard AI-blue)
+*/
+
+
+
+:root {
+  /* Premium Dark Theme Colors (Zinc/Graphite based, not blue) */
+  --bg-primary: #09090B; /* Zinc 950 - Almost black */
+  --bg-secondary: #18181B; /* Zinc 900 */
+  --bg-card: #18181B;
+  --bg-card-hover: #27272A; /* Zinc 800 */
+  --border: #27272A;
+  
+  --text-primary: #FAFAFA; /* Zinc 50 */
+  --text-secondary: #A1A1AA; /* Zinc 400 */
+  --text-muted: #71717A; /* Zinc 500 */
+  
+  --accent: #E4E4E7; /* Zinc 200 for buttons */
+  --accent-text: #09090B; /* Dark text on light buttons */
+  --accent-hover: #FFFFFF;
+  --accent-glow: transparent;
+  
+  --cyan: #0E7490;
+  --green: #10B981;
+  --orange: #F59E0B;
+  --red: #EF4444;
+  
+  --font-sans: 'DM Sans', sans-serif;
+  --font-serif: 'Playfair Display', serif;
+  
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
+  --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+}
+
+/* Global Overrides */
+html, body, #root {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-sans); /* Sticking to Sans for a cleaner, modern tech look */
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+/* Strip all gradients and glassmorphism */
+* {
+  backdrop-filter: none !important;
+}
+
+/* Button Overrides */
+.btn-primary, .btn-hero, .btn-book, .tw-btn-search, .pay-btn {
+  background: var(--accent) !important;
+  color: var(--accent-text) !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.1) inset !important;
+  border-radius: 99px !important;
+  font-family: var(--font-sans) !important;
+  border: none !important;
+  font-weight: 600 !important;
+  width: max-content !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-primary:hover, .btn-hero:hover, .btn-book:hover, .tw-btn-search:hover, .pay-btn:hover {
+  background: var(--accent-hover) !important;
+  transform: translateY(-1px);
+}
+
+/* Landing Page Overrides */
+.landing {
+  background: var(--bg-primary) !important;
+}
+
+.hero-glow { display: none !important; }
+
+.hero-badge {
+  background: #18181B !important;
+  border: 1px solid #27272A !important;
+  color: #E4E4E7 !important;
+  font-family: var(--font-sans);
+  box-shadow: var(--shadow-sm);
+}
+
+.hero h1 {
+  background: none !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  color: var(--text-primary) !important;
+  font-family: var(--font-sans) !important;
+  font-weight: 700 !important;
+}
+
+.dest-card img { filter: brightness(0.8) !important; }
+.dest-card:hover img { filter: brightness(1) !important; }
+
+.feature-card {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+/* Auth Page Overrides */
+.auth-page { background: var(--bg-primary) !important; }
+.auth-card {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.input-group {
+  background: #09090B !important;
+  border: 1px solid var(--border) !important;
+}
+.input-group input { color: var(--text-primary) !important; }
+.input-group:focus-within { border-color: #52525B !important; box-shadow: 0 0 0 1px #52525B !important; }
+
+/* Chat Layout Overrides */
+.chat-main {
+  background: var(--bg-primary) !important;
+}
+
+.chat-sidebar {
+  background: var(--bg-card) !important;
+  border-right: 1px solid var(--border) !important;
+}
+
+.sidebar-agent.active {
+  background: #27272A !important;
+  color: var(--text-primary) !important;
+}
+
+.btn-new-chat {
+  background: #09090B !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Chat Messages */
+.user-bubble {
+  background: #27272A !important;
+  color: var(--text-primary) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.ai-bubble {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-primary) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.itinerary-bubble {
+  border-left: 4px solid var(--text-primary) !important;
+  background: var(--bg-card) !important;
+}
+
+.markdown-content strong { color: var(--text-primary) !important; }
+.markdown-content code { background: #27272A !important; color: var(--text-primary) !important; }
+
+/* Result Cards */
+.result-card {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow) !important;
+}
+.result-card::before { display: none !important; } 
+.flight-card { border-left: 4px solid #3B82F6 !important; }
+.train-card { border-left: 4px solid #10B981 !important; }
+.hotel-card { border-left: 4px solid #F59E0B !important; }
+
+.card-badge {
+  background: #27272A !important;
+  color: var(--text-secondary) !important;
+}
+.train-card .card-badge { background: rgba(16,185,129,0.1) !important; color: #10B981 !important; }
+.hotel-card .card-badge { background: rgba(245,158,11,0.1) !important; color: #F59E0B !important; }
+
+/* Chat Input */
+.chat-input-area {
+  background: var(--bg-primary) !important;
+  border-top: 1px solid var(--border) !important;
+}
+.chat-input-form input {
+  background: #09090B !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow-sm) !important;
+  border-radius: 99px !important;
+  padding: 16px 24px !important;
+}
+.chat-input-form input:focus {
+  border-color: #52525B !important;
+  box-shadow: 0 0 0 1px #52525B !important;
+}
+.chat-input-form button {
+  background: var(--text-primary) !important;
+  color: var(--bg-primary) !important;
+  border-radius: 50% !important;
+  width: 48px; height: 48px;
+  padding: 0 !important;
+}
+
+/* Modals */
+.modal-content {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+
+/* Fix tab button in dark theme */
+.tab-btn.active {
+  background: var(--accent) !important;
+  color: var(--accent-text) !important;
+}

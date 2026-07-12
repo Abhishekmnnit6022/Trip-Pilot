@@ -8,3 +8,4 @@ frontend/.env
 
 update_db.py
 output.txt
+documentation.txt
