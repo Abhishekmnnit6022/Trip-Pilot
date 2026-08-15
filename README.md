@@ -19,8 +19,10 @@ TripPilot is a state-of-the-art, enterprise-grade AI travel platform. Built on L
 - **Smart Result Cards:** Real-time fetched transport and hotel results are rendered as premium, interactive glassmorphic UI cards. Hotels are auto-sorted to give you the cheapest, highest-rated options first.
 - **Dynamic Date Selection:** Users can override and explicitly lock in travel dates during checkout.
 
-### 📱 Omnichannel & Safety (Telegram Bot)
-- **Multi-Device Sync:** Once a user links their account (via secure OTP/DOB verification), any bookings made on the web app instantly push rich-text notifications to their Telegram app.
+### 📱 Omnichannel & Mobile-First UX
+- **Seamless Mobile Responsiveness:** The entire web dashboard is optimized for smartphones with an app-like hidden drawer sidebar, fluid glassmorphism grids, and adaptive chat layouts, allowing for flawless travel planning on the go.
+- **Deep-Linked Telegram Onboarding:** Mobile users can instantly pair their Telegram accounts using the "Tap to Connect" button, which deep-links directly into the bot with their unique auth token (bypassing the need to scan QR codes on mobile).
+- **Multi-Device Sync:** Once linked, any bookings made on the web app instantly push rich-text notifications to their Telegram app. The bot also provides direct links back to the deployed production app for cross-platform continuity.
 - **Interactive Chat Menus:** Users can pull up their active Flight, Train, and Hotel PNRs/Booking IDs directly from Telegram via inline keyboard menus.
 - **Advanced SOS Emergency System:** If a user triggers the "🚨 SOS Emergency" button on Telegram during a trip:
   - The bot instantly generates a dynamic **Google Maps Live Location** link.
