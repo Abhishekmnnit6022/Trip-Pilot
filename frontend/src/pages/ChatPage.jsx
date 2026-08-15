@@ -438,6 +438,12 @@ export default function ChatPage() {
         <div className="sidebar-header">
           <img src="/logo.png" alt="TripPilot" className="sidebar-logo-img" />
           <h2>TripPilot</h2>
+          <button 
+            className="mobile-sidebar-close" 
+            onClick={() => setIsMobileSidebarOpen(false)}
+          >
+            <X size={24} color="var(--text-secondary)" />
+          </button>
         </div>
 
         <button className="btn-new-chat" onClick={handleNewChat}>
