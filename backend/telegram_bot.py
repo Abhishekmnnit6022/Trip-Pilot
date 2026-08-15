@@ -613,7 +613,8 @@ def handle_message(message: dict) -> None:
         send_message(
             chat_id,
             "To generate magical AI itineraries and book new trips, "
-            "please visit the TripPilot web app! 🚀"
+            "please visit the TripPilot web app! 🚀\n\n"
+            "🌐 <b>Website:</b> https://trip-pilot-twin.vercel.app"
         )
         return
 

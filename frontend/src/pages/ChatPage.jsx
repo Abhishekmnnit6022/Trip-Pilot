@@ -530,14 +530,28 @@ export default function ChatPage() {
                 className="qr-code-img"
               />
               <p className="qr-scan-text">Scan to start chatting with your AI assistant on the go!</p>
-              <a 
-                href={`https://t.me/${botUsername}?start=${qrPayload}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="telegram-link-btn"
-              >
-                @{botUsername}
-              </a>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', marginTop: '10px' }}>
+                <a 
+                  href={`https://t.me/${botUsername}?start=${qrPayload}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="telegram-link-btn"
+                  style={{ width: '100%', textAlign: 'center', boxSizing: 'border-box' }}
+                >
+                  <MessageSquare size={14} style={{ marginRight: '6px' }} /> Tap to Connect on Mobile
+                </a>
+                
+                <a 
+                  href={`https://t.me/${botUsername}?start=${qrPayload}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="telegram-link-btn"
+                  style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-dim)', width: '100%', textAlign: 'center', boxSizing: 'border-box' }}
+                >
+                  @{botUsername}
+                </a>
+              </div>
             </div>
           </div>
         )}
@@ -740,12 +754,36 @@ export default function ChatPage() {
             </p>
             
             {botUsername && qrPayload && (
-              <div style={{ background: '#fff', padding: '1rem', borderRadius: '16px', display: 'inline-block', marginBottom: '1.5rem' }}>
-                <img 
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent('https://t.me/' + botUsername + '?start=' + qrPayload)}`} 
-                  alt="Telegram QR" 
-                  style={{ display: 'block', width: '200px', height: '200px' }}
-                />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div style={{ background: '#fff', padding: '1rem', borderRadius: '16px', display: 'inline-block' }}>
+                  <img 
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent('https://t.me/' + botUsername + '?start=' + qrPayload)}`} 
+                    alt="Telegram QR" 
+                    style={{ display: 'block', width: '200px', height: '200px' }}
+                  />
+                </div>
+                <a 
+                  href={`https://t.me/${botUsername}?start=${qrPayload}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{
+                    background: 'rgba(0, 136, 204, 0.1)',
+                    color: '#0088cc',
+                    padding: '0.8rem 1.5rem',
+                    borderRadius: '12px',
+                    textDecoration: 'none',
+                    fontWeight: '600',
+                    fontSize: '1rem',
+                    border: '1px solid rgba(0, 136, 204, 0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 4px 12px rgba(0, 136, 204, 0.15)'
+                  }}
+                >
+                  <MessageSquare size={18} /> Tap to Connect on Mobile
+                </a>
               </div>
             )}
             
