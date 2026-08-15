@@ -26,7 +26,7 @@ import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Send, LogOut, Plus, Map, Bot, User,
-  Loader2, UserCircle, Ticket, ChevronDown, MessageSquare
+  Loader2, UserCircle, Ticket, ChevronDown, MessageSquare, Menu, X
 } from 'lucide-react';
 
 /* ── Agent metadata for the sidebar & inline status indicators ────────────── */
@@ -74,6 +74,7 @@ export default function ChatPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [botUsername, setBotUsername] = useState('');
   const [activeTripId, setActiveTripId] = useState(null);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   /* ── Refs ────────────────────────────────────────────────────────────────── */
   const messagesEndRef = useRef(null);
@@ -424,8 +425,16 @@ export default function ChatPage() {
   return (
     <div className="chat-layout">
 
+      {/* Mobile Overlay */}
+      {isMobileSidebarOpen && (
+        <div 
+          className="mobile-sidebar-overlay" 
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
+
       {/* ═══════════════════ SIDEBAR ═══════════════════════════════════════ */}
-      <aside className="chat-sidebar">
+      <aside className={`chat-sidebar ${isMobileSidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <img src="/logo.png" alt="TripPilot" className="sidebar-logo-img" />
           <h2>TripPilot</h2>
@@ -570,6 +579,15 @@ export default function ChatPage() {
 
       {/* ═══════════════════ CHAT AREA ═════════════════════════════════════ */}
       <main className="chat-main">
+        {/* Mobile Header */}
+        <div className="mobile-header">
+          <button className="mobile-menu-btn" onClick={() => setIsMobileSidebarOpen(true)}>
+            <Menu size={24} color="var(--text-primary)" />
+          </button>
+          <img src="/logo.png" alt="TripPilot" style={{ height: '32px', filter: 'invert(1) hue-rotate(180deg) brightness(1.5)' }} />
+          <div style={{ width: 24 }} /> {/* spacer */}
+        </div>
+
         <div className="chat-messages">
 
           {/* Welcome Screen (shown when no messages) */}
