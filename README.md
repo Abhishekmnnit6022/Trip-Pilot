@@ -3,7 +3,6 @@
 **An omnichannel, AI-driven travel planning platform that plans, books, and manages entire trips through natural conversation — on the web and on Telegram.**
 
 <p>
-  <img src="https://img.shields.io/badge/status-production--hardened-2ea44f" alt="status" />
   <img src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB" alt="frontend" />
   <img src="https://img.shields.io/badge/backend-FastAPI-009688" alt="backend" />
   <img src="https://img.shields.io/badge/AI-LangGraph%20%2B%20LangChain-6E56CF" alt="ai" />
