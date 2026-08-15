@@ -22,7 +22,7 @@ export default function LandingPage() {
     <div className="landing" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       
       {/* Navbar */}
-      <nav style={{ padding: '1.25rem 4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', background: 'var(--bg-card)', position: 'sticky', top: 0, zIndex: 100 }}>
+      <nav className="landing-nav">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {/* Added brightness(0) invert(1) for the dark theme to make the logo pure white */}
           <img src="/logo.png" alt="TripPilot" style={{ height: '56px', filter: 'brightness(0) invert(1)' }} />
@@ -34,7 +34,7 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <section style={{ padding: '6rem 4rem 4rem', display: 'flex', gap: '4rem', alignItems: 'center', maxWidth: '1400px', margin: '0 auto' }}>
+      <section className="hero-section">
         <motion.div style={{ flex: 1 }} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
           
           <div className="hero-badge" style={{ 
@@ -45,7 +45,7 @@ export default function LandingPage() {
             <Sparkles size={16} /> Meet the all-new TripPilot
           </div>
 
-          <h1 style={{ fontSize: '4.5rem', lineHeight: 1.1, marginBottom: '1.5rem', letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+          <h1 className="hero-title">
             Plan your next <br/><span style={{ color: 'var(--text-secondary)' }}>masterpiece.</span>
           </h1>
           
@@ -53,7 +53,7 @@ export default function LandingPage() {
             The AI-powered travel concierge that handles flights, trains, hotels, and itineraries. Fully synced with your Telegram for on-the-go access.
           </p>
           
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '2rem' }}>
+          <div className="hero-buttons">
             <button className="btn-primary" style={{ padding: '1rem 2rem', fontSize: '1.05rem', display: 'inline-flex', alignItems: 'center', gap: '8px', width: 'auto' }} onClick={() => navigate('/auth')}>
               Start Planning <ArrowRight size={18} />
             </button>
@@ -70,7 +70,7 @@ export default function LandingPage() {
         </motion.div>
 
         {/* Hero Image Masonry Grid */}
-        <motion.div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.8, delay: 0.2 }}>
+        <motion.div className="hero-grid" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.8, delay: 0.2 }}>
           <img src={DESTINATIONS[0].img} alt="Travel" style={{ width: '100%', height: '400px', objectFit: 'cover', borderRadius: '24px', marginTop: '40px', border: '1px solid var(--border)' }} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <img src={DESTINATIONS[1].img} alt="Travel" style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '24px', border: '1px solid var(--border)' }} />
@@ -80,9 +80,9 @@ export default function LandingPage() {
       </section>
 
       {/* Features Grid */}
-      <section id="features" style={{ padding: '8rem 4rem', maxWidth: '1200px', margin: '0 auto' }}>
+      <section id="features" className="features-section">
         <div style={{ textAlign: 'center', marginBottom: '5rem' }}>
-          <h2 style={{ fontSize: '3.5rem', marginBottom: '1.5rem', letterSpacing: '-0.02em' }}>Everything you need.</h2>
+          <h2 className="features-title">Everything you need.</h2>
           <p style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', maxWidth: '600px', margin: '0 auto', lineHeight: 1.6 }}>From booking to expenses to emergency alerts, TripPilot is your complete travel operating system.</p>
         </div>
         
@@ -100,7 +100,7 @@ export default function LandingPage() {
       </section>
 
       {/* Footer CTA */}
-      <section style={{ background: '#18181B', color: 'white', padding: '8rem 4rem', textAlign: 'center', marginTop: 'auto', borderTop: '1px solid var(--border)' }}>
+      <section className="footer-cta">
         <h2 style={{ fontSize: '4rem', color: 'white', marginBottom: '1.5rem', letterSpacing: '-0.02em' }}>Ready to travel?</h2>
         <p style={{ fontSize: '1.3rem', color: '#A1A1AA', marginBottom: '3rem', maxWidth: '500px', margin: '0 auto', lineHeight: 1.6 }}>Join thousands of travelers planning their trips effortlessly with our AI.</p>
         <button className="btn-primary" style={{ margin: '0 auto', width: 'auto', display: 'inline-flex', padding: '1.2rem 3rem', fontSize: '1.1rem', transition: 'transform 0.2s' }} onMouseOver={e => e.target.style.transform='scale(1.05)'} onMouseOut={e => e.target.style.transform='scale(1)'} onClick={() => navigate('/auth')}>
@@ -109,8 +109,8 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer style={{ background: 'var(--bg-primary)', borderTop: '1px solid var(--border)', padding: '4rem' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '3rem' }}>
+      <footer className="footer-section">
+        <div className="footer-grid">
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <img src="/logo.png" alt="TripPilot" style={{ height: '48px', width: 'fit-content', filter: 'brightness(0) invert(1)' }} />
