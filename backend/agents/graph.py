@@ -176,16 +176,24 @@ def compile_app():
         return graph.compile(), None
 
     log.info("Connecting to Supabase PostgreSQL for LangGraph checkpointing…")
-    conn = psycopg.connect(SUPABASE_DB_URL, autocommit=True)
-    checkpointer = PostgresSaver(conn)
-
     try:
-        checkpointer.setup()
-        log.info("LangGraph checkpoint tables ready.")
-    except Exception as exc:
-        # Tables may already exist from a previous run
-        log.warning("Checkpointer setup note: %s", exc)
+        # Add a 5 second connect timeout to prevent hanging on DNS/IPv6 issues
+        connect_kwargs = {"autocommit": True, "connect_timeout": 5}
+        conn = psycopg.connect(SUPABASE_DB_URL, **connect_kwargs)
+        checkpointer = PostgresSaver(conn)
+        
+        try:
+            checkpointer.setup()
+            log.info("LangGraph checkpoint tables ready.")
+        except Exception as exc:
+            # Tables may already exist from a previous run
+            log.warning("Checkpointer setup note: %s", exc)
 
-    graph = build_graph()
-    compiled = graph.compile(checkpointer=checkpointer)
-    return compiled, conn
+        graph = build_graph()
+        compiled = graph.compile(checkpointer=checkpointer)
+        return compiled, conn
+    except Exception as e:
+        log.error("Failed to connect to Supabase DB for checkpointing: %s", e)
+        log.warning("Running WITHOUT checkpointer (no memory) as fallback.")
+        graph = build_graph()
+        return graph.compile(), None

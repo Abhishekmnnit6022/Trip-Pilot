@@ -62,6 +62,9 @@ export default function ChatPage() {
 
   /* ── Modal state ────────────────────────────────────────────────────────── */
   const [showProfile, setShowProfile] = useState(false);
+  const [showQrOnboarding, setShowQrOnboarding] = useState(false);
+  const [qrTimer, setQrTimer] = useState(30);
+  const [isProfileMandatory, setIsProfileMandatory] = useState(false);
   const [bookingModal, setBookingModal] = useState({ open: false, data: null });
 
   /* ── Sidebar state ──────────────────────────────────────────────────────── */
@@ -91,8 +94,11 @@ export default function ChatPage() {
           });
           if (resp.ok) {
             const data = await resp.json();
-            if (!data.phone_number || !data.birth_date) {
+            if (!data.phone_number || !data.birth_date || !data.full_name) {
               setShowProfile(true);
+              setIsProfileMandatory(true);
+            } else {
+              setIsProfileMandatory(false);
             }
           }
         } catch (err) {
@@ -108,6 +114,22 @@ export default function ChatPage() {
 
     return () => subscription.unsubscribe();
   }, [navigate]);
+
+  const handleProfileComplete = () => {
+    setIsProfileMandatory(false);
+    setShowProfile(false);
+    setShowQrOnboarding(true);
+    let timeLeft = 30;
+    setQrTimer(timeLeft);
+    const interval = setInterval(() => {
+      timeLeft -= 1;
+      setQrTimer((prev) => prev - 1);
+      if (timeLeft <= 0) {
+        clearInterval(interval);
+        setShowQrOnboarding(false);
+      }
+    }, 1000);
+  };
 
   /* ── Auto-scroll chat to bottom on new messages ─────────────────────────── */
   useEffect(() => {
@@ -484,13 +506,13 @@ export default function ChatPage() {
             <h3>📱 Connect on Telegram</h3>
             <div className="telegram-qr-card">
               <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://t.me/${botUsername}`} 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`https://t.me/${botUsername}?start=${user?.id}`)}`} 
                 alt="Telegram Bot QR" 
                 className="qr-code-img"
               />
               <p className="qr-scan-text">Scan to start chatting with your AI assistant on the go!</p>
               <a 
-                href={`https://t.me/${botUsername}`} 
+                href={`https://t.me/${botUsername}?start=${user?.id}`} 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="telegram-link-btn"
@@ -643,7 +665,7 @@ export default function ChatPage() {
 
         {/* Travel Widget + Chat Input */}
         <div className="chat-input-area">
-          <TravelWidget onSubmit={sendMessage} disabled={isLoading} />
+          <TravelWidget onSubmit={sendMessage} disabled={isLoading || isProfileMandatory} />
           <form className="chat-input-form" onSubmit={handleSubmit}>
             <input
               type="text"
@@ -652,7 +674,7 @@ export default function ChatPage() {
               placeholder="Type your travel request…"
               disabled={isLoading}
             />
-            <button type="submit" disabled={isLoading || !input.trim()}>
+            <button type="submit" disabled={isLoading || !input.trim() || isProfileMandatory}>
               {isLoading ? <Loader2 size={20} className="spin" /> : <Send size={20} />}
             </button>
           </form>
@@ -660,7 +682,13 @@ export default function ChatPage() {
       </main>
 
       {/* ═══════════════════ MODALS ════════════════════════════════════════ */}
-      <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />
+      <ProfileModal 
+        isOpen={showProfile} 
+        onClose={() => setShowProfile(false)} 
+        mandatory={isProfileMandatory}
+        onProfileComplete={handleProfileComplete}
+        userId={user?.id}
+      />
       <BookingModal
         isOpen={bookingModal.open}
         onClose={() => setBookingModal({ open: false, data: null })}
@@ -668,6 +696,31 @@ export default function ChatPage() {
         onBooked={() => fetchBookings()}
         tripId={activeTripId}
       />
+      {/* QR Onboarding Modal */}
+      {showQrOnboarding && (
+        <div className="modal-overlay">
+          <div className="auth-card" style={{ maxWidth: '400px', textAlign: 'center', zIndex: 9999 }}>
+            <h2>🔗 Connect Telegram</h2>
+            <p>Scan this QR code with your phone to instantly link your Telegram account for SOS alerts and live updates.</p>
+            
+            {botUsername && user?.id && (
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent('https://t.me/' + botUsername + '?start=' + user.id)}`} 
+                alt="Telegram QR" 
+                style={{ margin: '1.5rem auto', display: 'block', borderRadius: '12px', border: '1px solid var(--border)' }}
+              />
+            )}
+            
+            <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem' }}>
+              No manual entry needed! Auto-closes in {qrTimer}s.
+            </p>
+
+            <button className="tw-btn" onClick={() => setShowQrOnboarding(false)} style={{ width: '100%', marginTop: '1rem' }}>
+              Skip for now
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

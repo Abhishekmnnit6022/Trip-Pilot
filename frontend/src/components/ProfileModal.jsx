@@ -16,7 +16,7 @@ import { useState, useEffect } from 'react';
 import { supabase, API_URL } from '../lib/supabase';
 import { X, User, Phone, Calendar, Heart, Save, Loader2, Shield, AlertTriangle } from 'lucide-react';
 
-export default function ProfileModal({ isOpen, onClose }) {
+export default function ProfileModal({ isOpen, onClose, mandatory, onProfileComplete, userId }) {
   /* ── State ──────────────────────────────────────────────────────────────── */
   const [profile, setProfile] = useState({
     full_name: '',
@@ -104,6 +104,9 @@ export default function ProfileModal({ isOpen, onClose }) {
       });
       if (resp.ok) {
         setSaved(true);
+        if (mandatory && profile.full_name && profile.phone_number && profile.birth_date) {
+            onProfileComplete();
+        }
         setTimeout(() => setSaved(false), 2500);
       }
     } catch (err) {
@@ -139,14 +142,15 @@ export default function ProfileModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={mandatory ? null : onClose}>
       <div className="auth-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px', padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
         <div className="auth-header" style={{ margin: 0, padding: '2rem 2.5rem 1rem', borderBottom: '1px solid var(--border)' }}>
           <h2 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>Edit Profile</span>
-            <button className="close-btn" onClick={onClose}><X size={20} /></button>
+            {!mandatory && <button className="close-btn" onClick={onClose}><X size={20} /></button>}
           </h2>
           
+          {mandatory && <div style={{background: "var(--orange)", padding: "10px", borderRadius: "8px", marginBottom: "1rem", color: "#fff", fontSize: "0.9rem"}}>⚠️ Please complete your basic info to start planning trips!</div>}
           <div className="profile-tabs">
             <button className={`tab-btn ${activeTab === 'basic' ? 'active' : ''}`} onClick={() => setActiveTab('basic')}>Basic Info</button>
             <button className={`tab-btn ${activeTab === 'twin' ? 'active' : ''}`} onClick={() => setActiveTab('twin')}>🧠 My Travel Twin</button>
@@ -243,47 +247,24 @@ export default function ProfileModal({ isOpen, onClose }) {
                 </div>
               ) : (
                 <>
-                  <p className="telegram-help">
-                    {botUsername ? (
-                      <>1. Open <a href={`https://t.me/${botUsername}`} target="_blank" rel="noopener noreferrer">@{botUsername}</a> on Telegram and send <code>/start</code><br/>
-                      2. The bot will reply with your Chat ID — paste it below:</>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    {botUsername && userId ? (
+                      <>
+                        <img 
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent('https://t.me/' + botUsername + '?start=' + userId)}`} 
+                          alt="Telegram QR Code" 
+                          style={{ borderRadius: '8px', border: '1px solid var(--border)' }}
+                        />
+                        <p className="telegram-help" style={{ flex: 1, margin: 0 }}>
+                          <b>Scan this QR code</b> with your phone's camera to instantly link your Telegram account.<br/><br/>
+                          No manual entry required! The bot will securely read your unique ID.
+                        </p>
+                      </>
                     ) : (
-                      <>Telegram bot not configured yet. Add TELEGRAM_BOT_TOKEN to your .env file.</>
+                      <p className="telegram-help">
+                        Telegram bot not configured yet or User ID missing.
+                      </p>
                     )}
-                  </p>
-                  <div className="telegram-link-row">
-                    <input
-                      type="text"
-                      placeholder="Your Telegram Chat ID"
-                      value={telegramChatId}
-                      onChange={(e) => setTelegramChatId(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="tw-btn-search"
-                      style={{ flex: '0 0 auto', padding: '8px 16px' }}
-                      onClick={async () => {
-                        if (!telegramChatId.trim()) return;
-                        try {
-                          const { data: { session } } = await supabase.auth.getSession();
-                          if (!session) return;
-                          const resp = await fetch(`${API_URL}/api/telegram/link`, {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                              Authorization: `Bearer ${session.access_token}`,
-                            },
-                            body: JSON.stringify({ telegram_chat_id: telegramChatId }),
-                          });
-                          if (resp.ok) setTelegramLinked(true);
-                        } catch (err) {
-                          console.error('Telegram link failed:', err);
-                        }
-                      }}
-                      disabled={!telegramChatId.trim()}
-                    >
-                      Link
-                    </button>
                   </div>
                 </>
               )}

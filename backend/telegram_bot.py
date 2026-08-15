@@ -258,13 +258,31 @@ def handle_message(message: dict) -> None:
             TRIP_END_STATE.pop(chat_id, None)
 
     # ── 1. /start command ────────────────────────────────────────────────────
-    if text == "/start":
+    if text.startswith("/start"):
         LINK_STATE.pop(chat_id, None)
         EC_STATE.pop(chat_id, None)
         # Cancel any active SOS
         if chat_id in SOS_STATE:
             SOS_STATE[chat_id]["active"] = False
             SOS_STATE.pop(chat_id, None)
+
+        # Check for deep-link payload (e.g., /start <user_id>)
+        parts = text.split()
+        if len(parts) > 1:
+            payload_user_id = parts[1].strip()
+            try:
+                # Try to instantly link the account
+                resp = _supabase.table("user_profiles").update({"telegram_chat_id": str(chat_id)}).eq("id", payload_user_id).execute()
+                if resp.data:
+                    send_message(
+                        chat_id, 
+                        "✅ <b>Account Linked Successfully!</b>\n\n"
+                        "You are now ready to receive live booking updates, interactive itineraries, and instant SOS alerts directly in Telegram.", 
+                        _get_main_menu_keyboard()
+                    )
+                    return
+            except Exception as e:
+                log.error("Failed to auto-link account via deep link: %s", e)
 
         reply_markup = {"remove_keyboard": True}
 
