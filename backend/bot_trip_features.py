@@ -14,6 +14,9 @@ log = logging.getLogger(__name__)
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
 
+# Global session to dramatically speed up Telegram API calls by reusing TCP/SSL connections
+bot_session = requests.Session()
+
 def _get_llm():
     return ChatGroq(model="llama-3.1-8b-instant", temperature=0.2)
 
@@ -82,7 +85,7 @@ def handle_my_trips(chat_id: int, user_id: str):
             {"text": f"🎒 {t['name']}", "callback_data": f"set_trip:{t['id']}"}
         ])
 
-    requests.post(
+    bot_session.post(
         API_URL + "sendMessage",
         json={
             "chat_id": chat_id,
@@ -124,7 +127,9 @@ def handle_callback_query(callback_query: dict):
                  {"text": "🏁 End This Trip", "callback_data": f"end_trip_confirm:{trip_id}"}]
             ]
             
-            requests.post(
+            _answer_callback(callback_id)
+            
+            bot_session.post(
                 API_URL + "editMessageText",
                 json={
                     "chat_id": chat_id,
@@ -132,9 +137,9 @@ def handle_callback_query(callback_query: dict):
                     "text": f"✅ Active Trip set to: <b>{trip_name}</b>\n\nWhat would you like to do?\n(You can also just send me a message like <i>'Paid Rs 500 for lunch'</i> to log an expense automatically!)",
                     "parse_mode": "HTML",
                     "reply_markup": {"inline_keyboard": inline_keyboard}
-                }
+                },
+                timeout=10
             )
-            _answer_callback(callback_id)
         except Exception as exc:
             log.error("Failed to set active trip: %s", exc)
             _answer_callback(callback_id, "Error setting active trip.")
@@ -155,6 +160,7 @@ def handle_callback_query(callback_query: dict):
         _answer_callback(callback_id, "✅ Already completed and logged!", show_alert=False)
 
     elif data.startswith("view_bkg:"):
+        _answer_callback(callback_id)
         _, trip_id, b_type = data.split(":")
         _handle_view_bookings(chat_id, user_id, trip_id, b_type, callback_id)
 
@@ -190,11 +196,11 @@ def handle_callback_query(callback_query: dict):
         _answer_callback(callback_id, "Packing list feature coming soon!", show_alert=True)
 
 def _answer_callback(callback_query_id: str, text: str = "", show_alert: bool = False):
-    requests.post(API_URL + "answerCallbackQuery", json={
+    bot_session.post(API_URL + "answerCallbackQuery", json={
         "callback_query_id": callback_query_id,
         "text": text,
         "show_alert": show_alert
-    })
+    }, timeout=5)
 
 def _handle_show_itinerary(chat_id: int, message_id: int, trip_id: str, callback_id: str):
     # Fetch existing itinerary items
@@ -276,17 +282,18 @@ def _render_itinerary_keyboard(chat_id: int, message_id: int, items: list, is_ne
     text_content = "📋 <b>Interactive Itinerary Checklist</b>\nClick an item to mark it as completed. Completing an item will automatically log its estimated cost to your Trip Expenses!"
     
     if is_new:
-        requests.post(
+        bot_session.post(
             API_URL + "sendMessage",
             json={
                 "chat_id": chat_id,
                 "text": text_content,
                 "parse_mode": "HTML",
                 "reply_markup": {"inline_keyboard": inline_keyboard}
-            }
+            },
+            timeout=10
         )
     else:
-        requests.post(
+        bot_session.post(
             API_URL + "editMessageText",
             json={
                 "chat_id": chat_id,
@@ -294,7 +301,8 @@ def _render_itinerary_keyboard(chat_id: int, message_id: int, items: list, is_ne
                 "text": text_content,
                 "parse_mode": "HTML",
                 "reply_markup": {"inline_keyboard": inline_keyboard}
-            }
+            },
+            timeout=10
         )
 
 def _handle_toggle_itinerary(chat_id: int, message_id: int, itin_id: str, callback_id: str):
@@ -354,13 +362,14 @@ def _handle_view_expenses(chat_id: int, message_id: int, trip_id: str, callback_
             
         text += f"\n<b>Total: Rs {total}</b>"
         
-        requests.post(
+        bot_session.post(
             API_URL + "sendMessage",
             json={
                 "chat_id": chat_id,
                 "text": text,
                 "parse_mode": "HTML"
-            }
+            },
+            timeout=10
         )
         _answer_callback(callback_id)
     except Exception as exc:
@@ -409,7 +418,7 @@ def _handle_view_bookings(chat_id: int, user_id: str, trip_id: str, b_type: str,
                 
         msg += f"📅 Date: {b['travel_date'] or 'TBD'}\n\n"
 
-    requests.post(API_URL + "sendMessage", json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
+    bot_session.post(API_URL + "sendMessage", json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}, timeout=10)
     _answer_callback(callback_id)
 
 def handle_ad_hoc_expense(chat_id: int, user_id: str, text: str) -> bool:
