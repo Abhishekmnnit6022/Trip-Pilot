@@ -53,21 +53,11 @@ def get_booked_trips_for_bot(user_id: str) -> list[dict]:
                     dest_clean = str(dest).split(" International")[0].split(" Airport")[0].split(" Junction")[0].strip()
                     trip_dests[tid] = f"Trip: {dest_clean}"
         
-        # Filter and rename
+        # Filter to only return trips that have bookings
         valid_trips = []
         for t in all_trips:
             if t["id"] in booked_trip_ids:
-                new_name = trip_dests.get(t["id"])
-                # We need to make sure t is mutable dictionary (RealDictRow is dict-like)
                 t_dict = dict(t)
-                if new_name and t_dict["name"] != new_name:
-                    cur.execute("UPDATE trips SET name = %s WHERE id = %s", (new_name, t_dict["id"]))
-                    t_dict["name"] = new_name
-                elif not str(t_dict["name"]).startswith("Trip:"):
-                    new_name = "Trip: Planned Destination"
-                    cur.execute("UPDATE trips SET name = %s WHERE id = %s", (new_name, t_dict["id"]))
-                    t_dict["name"] = new_name
-                
                 valid_trips.append(t_dict)
                 
         conn.commit()

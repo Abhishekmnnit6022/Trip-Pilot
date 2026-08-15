@@ -57,8 +57,15 @@ export default function ProfileModal({ isOpen, onClose, mandatory, onProfileComp
       });
       if (resp.ok) {
         const data = await resp.json();
+        
+        let defaultName = data.full_name || '';
+        if (!defaultName && session.user.email) {
+          const emailName = session.user.email.split('@')[0];
+          defaultName = emailName.replace(/[^a-zA-Z]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()).trim();
+        }
+
         setProfile({
-          full_name: data.full_name || '',
+          full_name: defaultName,
           phone_number: data.phone_number || '',
           birth_date: data.birth_date || '',
           travel_preferences: data.travel_preferences || {},
@@ -105,7 +112,7 @@ export default function ProfileModal({ isOpen, onClose, mandatory, onProfileComp
       if (resp.ok) {
         setSaved(true);
         if (mandatory && profile.full_name && profile.phone_number && profile.birth_date) {
-            onProfileComplete();
+            onProfileComplete(profile);
         }
         setTimeout(() => setSaved(false), 2500);
       }
@@ -238,37 +245,7 @@ export default function ProfileModal({ isOpen, onClose, mandatory, onProfileComp
               </div>
             </div>
 
-            {/* Telegram Linking */}
-            <div className="profile-field">
-              <label>📱 Telegram Notifications</label>
-              {telegramLinked ? (
-                <div className="telegram-linked">
-                  ✅ Linked (Chat ID: {telegramChatId})
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                    {botUsername && userId ? (
-                      <>
-                        <img 
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent('https://t.me/' + botUsername + '?start=' + userId)}`} 
-                          alt="Telegram QR Code" 
-                          style={{ borderRadius: '8px', border: '1px solid var(--border)' }}
-                        />
-                        <p className="telegram-help" style={{ flex: 1, margin: 0 }}>
-                          <b>Scan this QR code</b> with your phone's camera to instantly link your Telegram account.<br/><br/>
-                          No manual entry required! The bot will securely read your unique ID.
-                        </p>
-                      </>
-                    ) : (
-                      <p className="telegram-help">
-                        Telegram bot not configured yet or User ID missing.
-                      </p>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
+            {/* Telegram Linking removed from Basic Info tab (now in popup and sidebar) */}
             </>
             )}
 

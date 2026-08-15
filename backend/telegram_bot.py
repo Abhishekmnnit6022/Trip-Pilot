@@ -266,21 +266,51 @@ def handle_message(message: dict) -> None:
             SOS_STATE[chat_id]["active"] = False
             SOS_STATE.pop(chat_id, None)
 
-        # Check for deep-link payload (e.g., /start <user_id>)
+        # Check for deep-link payload (e.g., /start <payload>)
         parts = text.split()
         if len(parts) > 1:
-            payload_user_id = parts[1].strip()
+            payload = parts[1].strip()
+            target_user_id = payload
+            
+            import base64
             try:
-                # Try to instantly link the account
-                resp = _supabase.table("user_profiles").update({"telegram_chat_id": str(chat_id)}).eq("id", payload_user_id).execute()
-                if resp.data:
-                    send_message(
-                        chat_id, 
-                        "✅ <b>Account Linked Successfully!</b>\n\n"
-                        "You are now ready to receive live booking updates, interactive itineraries, and instant SOS alerts directly in Telegram.", 
-                        _get_main_menu_keyboard()
-                    )
-                    return
+                # Convert base64url back to standard base64
+                std_b64 = payload.replace('-', '+').replace('_', '/')
+                # Add padding if missing
+                padded = std_b64 + '=' * (-len(std_b64) % 4)
+                decoded = base64.b64decode(padded).decode('utf-8')
+                
+                if "_" in decoded:
+                    phone_part, dob_part = decoded.split("_", 1)
+                    # Use RPC to get profiles and find match
+                    try:
+                        resp = _supabase.rpc("bot_get_profiles").execute()
+                        profiles = resp.data or []
+                    except Exception:
+                        resp = _supabase.table("user_profiles").select("id, phone_number, birth_date").execute()
+                        profiles = resp.data or []
+                        
+                    for p in profiles:
+                        db_phone = (p.get("phone_number") or "").replace(" ", "").replace("+", "").replace("-", "")
+                        db_dob = (p.get("birth_date") or "")
+                        if db_phone and phone_part.endswith(db_phone[-10:]) and db_dob == dob_part:
+                            target_user_id = p["id"]
+                            break
+            except Exception as e:
+                # Fallback to assuming payload is directly a user_id (UUID)
+                pass
+                
+            try:
+                # Use the RPC to bypass RLS and link instantly
+                _supabase.rpc("bot_link_telegram", {"p_user_id": target_user_id, "p_chat_id": str(chat_id)}).execute()
+                
+                send_message(
+                    chat_id, 
+                    "✅ <b>Account Linked Successfully!</b>\n\n"
+                    "You are now ready to receive live booking updates, interactive itineraries, and instant SOS alerts directly in Telegram.", 
+                    _get_main_menu_keyboard()
+                )
+                return
             except Exception as e:
                 log.error("Failed to auto-link account via deep link: %s", e)
 
@@ -710,6 +740,8 @@ def _generate_and_send_pdf(chat_id: int, user_id: str, trip_id: str):
     """Generate and send the final PDF report for a trip via Telegram."""
     import tempfile
     import traceback
+    
+    trip_id = str(trip_id)
     
     # 0. Fetch the trip
     try:

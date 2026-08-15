@@ -94,6 +94,7 @@ export default function ChatPage() {
           });
           if (resp.ok) {
             const data = await resp.json();
+            setProfileData(data); // Set profile data for QR payload
             if (!data.phone_number || !data.birth_date || !data.full_name) {
               setShowProfile(true);
               setIsProfileMandatory(true);
@@ -115,7 +116,8 @@ export default function ChatPage() {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const handleProfileComplete = () => {
+  const handleProfileComplete = (updatedProfile) => {
+    if (updatedProfile) setProfileData(updatedProfile);
     setIsProfileMandatory(false);
     setShowProfile(false);
     setShowQrOnboarding(true);
@@ -182,6 +184,23 @@ export default function ChatPage() {
         .catch(err => console.error('Failed to fetch bot info:', err));
     }
   }, [user, fetchBookings, fetchChatSessions]);
+
+  const [profileData, setProfileData] = useState(null);
+  const [qrPayload, setQrPayload] = useState('');
+
+  /* ── QR Payload computed from profile or user id ────────────────────────── */
+
+  useEffect(() => {
+    if (profileData?.phone_number && profileData?.birth_date) {
+      const phone = profileData.phone_number.replace(/\D/g, '');
+      const dob = profileData.birth_date; // YYYY-MM-DD
+      let b64 = btoa(`${phone}_${dob}`);
+      b64 = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+      setQrPayload(b64);
+    } else if (user) {
+      setQrPayload(user.id);
+    }
+  }, [profileData, user]);
 
   /* ── Sign out handler ───────────────────────────────────────────────────── */
   const handleLogout = async () => {
@@ -501,18 +520,18 @@ export default function ChatPage() {
         )}
 
         {/* Telegram QR Code */}
-        {botUsername && (
+        {botUsername && qrPayload && (
           <div className="sidebar-section telegram-qr-section">
             <h3>📱 Connect on Telegram</h3>
             <div className="telegram-qr-card">
               <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`https://t.me/${botUsername}?start=${user?.id}`)}`} 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`https://t.me/${botUsername}?start=${qrPayload}`)}`} 
                 alt="Telegram Bot QR" 
                 className="qr-code-img"
               />
               <p className="qr-scan-text">Scan to start chatting with your AI assistant on the go!</p>
               <a 
-                href={`https://t.me/${botUsername}?start=${user?.id}`} 
+                href={`https://t.me/${botUsername}?start=${qrPayload}`} 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="telegram-link-btn"
@@ -699,26 +718,67 @@ export default function ChatPage() {
       {/* QR Onboarding Modal */}
       {showQrOnboarding && (
         <div className="modal-overlay">
-          <div className="auth-card" style={{ maxWidth: '400px', textAlign: 'center', zIndex: 9999 }}>
-            <h2>🔗 Connect Telegram</h2>
-            <p>Scan this QR code with your phone to instantly link your Telegram account for SOS alerts and live updates.</p>
+          <motion.div 
+            className="auth-card" 
+            style={{ maxWidth: '420px', textAlign: 'center', zIndex: 9999, padding: '3rem 2rem' }}
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+          >
+            <div style={{
+              width: '64px', height: '64px', borderRadius: '16px', 
+              background: 'linear-gradient(135deg, #0088cc, #005580)', 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', 
+              margin: '0 auto 1.5rem', boxShadow: '0 8px 16px rgba(0, 136, 204, 0.2)'
+            }}>
+              <MessageSquare size={32} color="#fff" />
+            </div>
             
-            {botUsername && user?.id && (
-              <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent('https://t.me/' + botUsername + '?start=' + user.id)}`} 
-                alt="Telegram QR" 
-                style={{ margin: '1.5rem auto', display: 'block', borderRadius: '12px', border: '1px solid var(--border)' }}
-              />
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', color: 'var(--text-bright)' }}>Connect Telegram</h2>
+            <p style={{ color: 'var(--text-dim)', marginBottom: '2rem', lineHeight: '1.5' }}>
+              Scan this QR code with your phone to instantly link your Telegram account for SOS alerts and live updates.
+            </p>
+            
+            {botUsername && qrPayload && (
+              <div style={{ background: '#fff', padding: '1rem', borderRadius: '16px', display: 'inline-block', marginBottom: '1.5rem' }}>
+                <img 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent('https://t.me/' + botUsername + '?start=' + qrPayload)}`} 
+                  alt="Telegram QR" 
+                  style={{ display: 'block', width: '200px', height: '200px' }}
+                />
+              </div>
             )}
             
-            <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem' }}>
-              No manual entry needed! Auto-closes in {qrTimer}s.
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginBottom: '1.5rem', color: 'var(--blue)' }}>
+              <Loader2 size={16} className="spin" />
+              <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>Auto-closes in {qrTimer}s</span>
+            </div>
 
-            <button className="tw-btn" onClick={() => setShowQrOnboarding(false)} style={{ width: '100%', marginTop: '1rem' }}>
+            <button 
+              onClick={() => setShowQrOnboarding(false)} 
+              style={{ 
+                width: '100%', 
+                padding: '0.8rem',
+                background: 'rgba(255, 255, 255, 0.03)', 
+                border: '1px solid rgba(255, 255, 255, 0.1)', 
+                color: 'var(--text-dim)',
+                borderRadius: '12px',
+                fontSize: '0.95rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                e.currentTarget.style.color = 'var(--text-bright)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                e.currentTarget.style.color = 'var(--text-dim)';
+              }}
+            >
               Skip for now
             </button>
-          </div>
+          </motion.div>
         </div>
       )}
     </div>

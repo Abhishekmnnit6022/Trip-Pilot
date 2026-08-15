@@ -305,9 +305,11 @@ export default function BookingModal({ isOpen, onClose, bookingData, onBooked, t
                   </div>
                 </div>
 
-                <button className="btn-primary booking-cta" onClick={() => setStep(1)}>
-                  Continue to Payment <ChevronRight size={18} />
-                </button>
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.5rem', width: '100%' }}>
+                  <button className="btn-primary booking-cta" onClick={() => setStep(1)}>
+                    Continue to Payment <ChevronRight size={18} />
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -364,20 +366,22 @@ export default function BookingModal({ isOpen, onClose, bookingData, onBooked, t
               <span>256-bit SSL encrypted · Secure payment</span>
             </div>
 
-            <button
-              className="btn-primary booking-cta pay-btn"
-              onClick={handlePayment}
-              disabled={processing}
-            >
-              {processing ? (
-                <>
-                  <Loader2 size={18} className="spin" />
-                  Processing Payment…
-                </>
-              ) : (
-                <>Pay {getPrice()} <ChevronRight size={18} /></>
-              )}
-            </button>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.5rem', width: '100%' }}>
+              <button
+                className="btn-primary booking-cta pay-btn"
+                onClick={handlePayment}
+                disabled={processing}
+              >
+                {processing ? (
+                  <>
+                    <Loader2 size={18} className="spin" />
+                    Processing Payment…
+                  </>
+                ) : (
+                  <>Pay {getPrice()} <ChevronRight size={18} /></>
+                )}
+              </button>
+            </div>
 
             <button className="booking-back" onClick={() => setStep(0)} disabled={processing}>
               ← Back to Review
@@ -428,9 +432,11 @@ export default function BookingModal({ isOpen, onClose, bookingData, onBooked, t
               {!transactionId && <p>💳 Payment processed via simulated gateway.</p>}
             </div>
 
-            <button className="btn-primary booking-cta" onClick={onClose}>
-              Done
-            </button>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.5rem', width: '100%' }}>
+              <button className="btn-primary booking-cta" onClick={onClose}>
+                Done
+              </button>
+            </div>
           </div>
         )}
       </div>
