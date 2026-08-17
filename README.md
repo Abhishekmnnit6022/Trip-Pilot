@@ -44,7 +44,42 @@ Most AI travel-planning projects stop at "prompt in, itinerary text out." TripPi
 
 ## System Architecture
 
-![System Architecture](https://mermaid.ink/svg/JSV7aW5pdDogeyJmbG93Y2hhcnQiOiB7ImN1cnZlIjogImxpbmVhciJ9fX0lJQpmbG93Y2hhcnQgVEIKICAgIHN1YmdyYXBoIENsaWVudHNbIkNsaWVudCBMYXllciJdCiAgICAgICAgV0VCWyJXZWIgQXBwOiBSZWFjdCArIFZpdGUiXQogICAgICAgIFRHWyJUZWxlZ3JhbSBCb3QiXQogICAgZW5kCgogICAgc3ViZ3JhcGggQmFja2VuZFsiQXBwbGljYXRpb24gTGF5ZXI6IEZhc3RBUEkiXQogICAgICAgIEFQSVsiUkVTVCBBUEkiXQogICAgICAgIFNTRVsiU3RyZWFtaW5nIEVuZ2luZSJdCiAgICAgICAgQk9UWyJCb3QgU2VydmljZSJdCiAgICAgICAgU09TWyJTT1MgU2VydmljZSJdCiAgICBlbmQKCiAgICBzdWJncmFwaCBBSVsiQUkgT3JjaGVzdHJhdGlvbjogTGFuZ0dyYXBoIl0KICAgICAgICBST1VURVJbIlJvdXRlciBBZ2VudCJdIC0tPiBBR0VOVFNbIkZsaWdodCwgVHJhaW4sIEhvdGVsIEFnZW50cyJdCiAgICAgICAgQUdFTlRTIC0tPiBCVURHRVRbIkJ1ZGdldCBPcHRpbWl6ZXIiXQogICAgICAgIEJVREdFVCAtLT4gSVRJTlsiSXRpbmVyYXJ5IEFnZW50Il0KICAgICAgICBJVElOIC0tPiBGSU5BTFsiRmluYWwgU3VtbWFyeSBBZ2VudCJdCiAgICAgICAgVFdJTlsiVHJhdmVsIFR3aW4gT2JzZXJ2ZXIiXSAtLi0-IEFHRU5UUwogICAgICAgIFRXSU4gLS4tPiBJVElOCiAgICBlbmQKCiAgICBzdWJncmFwaCBEYXRhTGF5ZXJbIkRhdGEgYW5kIEludGVncmF0aW9ucyJdCiAgICAgICAgREJbIlN1cGFiYXNlIl0KICAgICAgICBFWFRbIkV4dGVybmFsIFByb3ZpZGVycyJdCiAgICAgICAgUEFZWyJTdHJpcGUiXQogICAgICAgIFNNU1siRmFzdDJTTVMiXQogICAgZW5kCgogICAgQ2xpZW50cyAtLT4gQmFja2VuZAogICAgQmFja2VuZCAtLT4gQUkKICAgIEFJIC0tPiBEYXRhTGF5ZXIKICAgIEJhY2tlbmQgLS0-IERhdGFMYXllcgo=?theme=dark&bgColor=1a1a1a)
+```mermaid
+%%{init: {"flowchart": {"curve": "linear"}}}%%
+flowchart TB
+    subgraph Clients["Client Layer"]
+        WEB["Web App: React + Vite"]
+        TG["Telegram Bot"]
+    end
+
+    subgraph Backend["Application Layer: FastAPI"]
+        API["REST API"]
+        SSE["Streaming Engine"]
+        BOT["Bot Service"]
+        SOS["SOS Service"]
+    end
+
+    subgraph AI["AI Orchestration: LangGraph"]
+        ROUTER["Router Agent"] --> AGENTS["Flight, Train, Hotel Agents"]
+        AGENTS --> BUDGET["Budget Optimizer"]
+        BUDGET --> ITIN["Itinerary Agent"]
+        ITIN --> FINAL["Final Summary Agent"]
+        TWIN["Travel Twin Observer"] -.-> AGENTS
+        TWIN -.-> ITIN
+    end
+
+    subgraph DataLayer["Data and Integrations"]
+        DB["Supabase"]
+        EXT["External Providers"]
+        PAY["Stripe"]
+        SMS["Fast2SMS"]
+    end
+
+    Clients --> Backend
+    Backend --> AI
+    AI --> DataLayer
+    Backend --> DataLayer
+```
 
 ---
 
@@ -52,7 +87,20 @@ Most AI travel-planning projects stop at "prompt in, itinerary text out." TripPi
 
 Every trip request flows through a graph of purpose-built agents rather than a single monolithic prompt:
 
-![Multi-Agent Planning Pipeline](https://mermaid.ink/svg/JSV7aW5pdDogeyJmbG93Y2hhcnQiOiB7ImN1cnZlIjogImxpbmVhciJ9fX0lJQpmbG93Y2hhcnQgTFIKICAgIEFbIlVzZXIgUHJvbXB0Il0gLS0-IEJbIlJvdXRlciBBZ2VudCJdCiAgICBCIC0tPiBDWyJEYXRhIEFnZW50cyJdCiAgICBDIC0tPnxubyByZXN1bHRzfCBEWyJXZWIgU2VhcmNoIEZhbGxiYWNrIl0KICAgIEQgLS0-IEVbIlJldHVybiBBZ2VudCJdCiAgICBDIC0tPiBFCiAgICBFIC0tPiBGWyJCdWRnZXQgT3B0aW1pemVyIl0KICAgIEYgLS0-fG92ZXIgYnVkZ2V0fCBDCiAgICBGIC0tPiBHWyJJdGluZXJhcnkgQWdlbnQiXQogICAgRyAtLT4gSFsiRmluYWwgQWdlbnQiXQogICAgSCAtLT4gSVsiUmVzcG9uc2UgdG8gVXNlciJdCg==?theme=dark&bgColor=1a1a1a)
+```mermaid
+%%{init: {"flowchart": {"curve": "linear"}}}%%
+flowchart LR
+    A["User Prompt"] --> B["Router Agent"]
+    B --> C["Data Agents"]
+    C -->|no results| D["Web Search Fallback"]
+    D --> E["Return Agent"]
+    C --> E
+    E --> F["Budget Optimizer"]
+    F -->|over budget| C
+    F --> G["Itinerary Agent"]
+    G --> H["Final Agent"]
+    H --> I["Response to User"]
+```
 
 The pipeline is cyclic rather than linear: if a proposed trip exceeds the user's budget, the **Budget Optimizer** loops back through the data agents — swapping flights for trains, adjusting hotel tier, and recalculating — before ever presenting a plan to the user.
 
@@ -62,7 +110,26 @@ The pipeline is cyclic rather than linear: if a proposed trip exceeds the user's
 
 TripPilot's standout feature is its personalization layer. Every time a user completes a booking, a background AI observer analyzes the transaction and quietly updates a persistent behavioral profile — without interrupting the user's session.
 
-![Travel Twin Sequence](https://mermaid.ink/svg/c2VxdWVuY2VEaWFncmFtCiAgICBwYXJ0aWNpcGFudCBVIGFzIFVzZXIKICAgIHBhcnRpY2lwYW50IEFwcCBhcyBUcmlwUGlsb3QKICAgIHBhcnRpY2lwYW50IE9icyBhcyBUcmF2ZWwgVHdpbiBPYnNlcnZlcgogICAgcGFydGljaXBhbnQgREIgYXMgU3VwYWJhc2UKCiAgICBVLT4-QXBwOiBDb25maXJtcyBhIGJvb2tpbmcKICAgIEFwcC0tPj5VOiBCb29raW5nIGNvbmZpcm1lZCBpbnN0YW50bHkKICAgIEFwcC0-Pk9iczogU2VuZHMgYm9va2luZyBldmVudCAoYXN5bmMsIG5vbi1ibG9ja2luZykKICAgIE9icy0-Pk9iczogQW5hbHl6ZXMgc3BlbmRpbmcsIHRpZXIsIGFuZCBwcmVmZXJlbmNlcwogICAgT2JzLT4-REI6IFVwZGF0ZXMgVHJhdmVsIFR3aW4gcHJvZmlsZQogICAgTm90ZSBvdmVyIERCOiBCdWRnZXQgc2Vuc2l0aXZpdHksIGhvdGVsIHRpZXIsIHdhbGtpbmcgdG9sZXJhbmNlLCBhZHZlbnR1cmUgbGV2ZWwKCiAgICBVLT4-QXBwOiBQbGFucyBuZXh0IHRyaXAKICAgIEFwcC0-PkRCOiBGZXRjaGVzIFRyYXZlbCBUd2luIHByb2ZpbGUKICAgIERCLS0-PkFwcDogQmVoYXZpb3JhbCBwcmVmZXJlbmNlcwogICAgQXBwLT4-QXBwOiBQZXJzb25hbGl6ZXMgaG90ZWwgc2VsZWN0aW9uIGFuZCBpdGluZXJhcnkgcGFjaW5nCiAgICBBcHAtLT4-VTogVHJpcCBwbGFuIHRhaWxvcmVkIHRvIHBhc3QgYmVoYXZpb3IK?theme=dark&bgColor=1a1a1a)
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant App as TripPilot
+    participant Obs as Travel Twin Observer
+    participant DB as Supabase
+
+    U->>App: Confirms a booking
+    App-->>U: Booking confirmed instantly
+    App->>Obs: Sends booking event (async, non-blocking)
+    Obs->>Obs: Analyzes spending, tier, and preferences
+    Obs->>DB: Updates Travel Twin profile
+    Note over DB: Budget sensitivity, hotel tier, walking tolerance, adventure level
+
+    U->>App: Plans next trip
+    App->>DB: Fetches Travel Twin profile
+    DB-->>App: Behavioral preferences
+    App->>App: Personalizes hotel selection and itinerary pacing
+    App-->>U: Trip plan tailored to past behavior
+```
 
 This lets TripPilot get measurably better at predicting a user's preferences with every trip planned, rather than treating each conversation as a blank slate.
 
@@ -119,18 +186,18 @@ pip install -r requirements.txt
 
 Create a `.env` file inside `backend/` with your own credentials:
 
-```
-GROQ_API_KEY=your_key_here
-AVIATIONSTACK_API_KEY=your_key_here
-TAVILY_API_KEY=your_key_here
-RAPIDAPI=your_key_here
-RAILRADAR_API_KEY=your_key_here
-SUPABASE_URL=your_supabase_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_DB_URL=your_supabase_db_url
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-FAST2SMSAPIKEY=your_key_here
-STRIPE_SECRET_KEY=your_stripe_test_key
+```bash
+GROQ_API_KEY=your_key_here                   # console.groq.com/keys
+AVIATIONSTACK_API_KEY=your_key_here          # aviationstack.com
+TAVILY_API_KEY=your_key_here                 # app.tavily.com
+RAPIDAPI=your_key_here                       # rapidapi.com (Booking.com API)
+RAILRADAR_API_KEY=your_key_here              # railradar.in
+SUPABASE_URL=your_supabase_url               # Supabase -> Settings -> API
+SUPABASE_ANON_KEY=your_supabase_anon_key     # Supabase -> Settings -> API
+SUPABASE_DB_URL=your_supabase_db_url         # Supabase -> Settings -> Database
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token   # @BotFather -> /newbot
+FAST2SMSAPIKEY=your_key_here                 # fast2sms.com
+STRIPE_SECRET_KEY=your_stripe_test_key       # stripe.com/test/apikeys
 ```
 
 Apply the database schema by running `supabase_migrations.sql` against your Supabase project (via the Supabase SQL editor or CLI).
@@ -150,10 +217,10 @@ npm install
 
 Create a `.env` file inside `frontend/` pointing to your backend and Supabase project:
 
-```
-VITE_API_BASE_URL=http://localhost:8000
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```bash
+VITE_API_BASE_URL=http://localhost:8000        # your running backend URL
+VITE_SUPABASE_URL=your_supabase_url             # same as SUPABASE_URL above
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key   # same as SUPABASE_ANON_KEY above
 ```
 
 Start the frontend:
@@ -170,6 +237,37 @@ npm run dev
 ### Swapping in your own APIs
 
 Every external integration is isolated inside `backend/tools/`, one file per provider (flights, trains, hotels, weather). To switch providers, replace the request logic in the relevant tool file and update the corresponding key in `.env` — the rest of the LangGraph pipeline is provider-agnostic and requires no changes.
+
+---
+
+## Project Structure
+
+```
+Trip-Pilot/
+├── backend/
+│   ├── app.py                    # FastAPI entrypoint, route registration, startup hooks
+│   ├── graph.py                  # Assembles the agent graph and defines edges/cycles
+│   ├── agents/                   # LangGraph node definitions (router, budget, itinerary, twin, final)
+│   ├── tools/                    # One file per external API (flights, trains, hotels, weather)
+│   ├── routes/                   # REST endpoints (profiles, bookings, payments, weather)
+│   ├── bot/                      # Telegram bot handlers, state machine, account linking
+│   ├── sos/                      # Emergency SOS logic and SMS alerting
+│   ├── db/                       # Supabase client, queries, RLS-aware helpers
+│   ├── supabase_migrations.sql   # Database schema to apply on a fresh Supabase project
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── src/
+│   │   ├── pages/                # Route-level views (chat, itinerary, booking, profile)
+│   │   ├── components/           # Reusable UI components
+│   │   ├── hooks/                # Data-fetching and streaming hooks
+│   │   ├── lib/                  # Supabase client, API wrapper, utilities
+│   │   └── App.jsx
+│   ├── index.html
+│   └── package.json
+│
+└── README.md
+```
 
 ---
 
