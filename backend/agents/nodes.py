@@ -167,10 +167,36 @@ def router_agent(state: TravelState) -> dict:
                  parsed.get('action'), parsed.get('origin'), parsed.get('destination'),
                  parsed.get('transport_preference'))
     except json.JSONDecodeError:
-        log.warning("[ROUTER] LLM did not return valid JSON — treating as chat response")
-        # If LLM didn't return valid JSON, treat as a general response
+        raw_text = extract_text(response.content)
+        log.warning("[ROUTER] LLM did not return valid JSON — inferring action from state")
+
+        # --- Smart fallback: infer action from current state ---
+        # If the user replied with a train tier and we know origin/dest/date, proceed with booking
+        if transport_preference == "train" and train_tier and origin and destination and start_date:
+            log.info("[ROUTER] Inferred action=auto_book_train from state (no JSON)")
+            return {
+                "messages": [AIMessage(content=raw_text.strip() or f"Got it! Searching for 3A trains from {origin} to {destination}...")],
+                "phase": "auto_book_train",
+                "needs_input": "",
+                "llm_calls": llm_calls,
+            }
+        # If the user replied with a tier keyword directly
+        tier_map = {"1a": "1A", "2a": "2A", "3a": "3A", "sl": "SL", "cc": "CC",
+                    "sleeper": "SL", "first ac": "1A", "second ac": "2A", "third ac": "3A"}
+        for keyword, tier_val in tier_map.items():
+            if keyword in raw_text.lower() or (state.get("messages") and keyword in extract_text(state["messages"][-1].content).lower()):
+                if transport_preference == "train" and origin and destination and start_date:
+                    log.info("[ROUTER] Inferred train_tier=%s and action=auto_book_train from keyword", tier_val)
+                    return {
+                        "messages": [AIMessage(content=raw_text.strip() or f"Perfect! Searching {tier_val} trains...")],
+                        "phase": "auto_book_train",
+                        "train_tier": tier_val,
+                        "needs_input": "",
+                        "llm_calls": llm_calls,
+                    }
+        # Default: return whatever the LLM said
         return {
-            "messages": [AIMessage(content=extract_text(response.content))],
+            "messages": [AIMessage(content=raw_text)],
             "phase": "respond",
             "needs_input": "",
             "llm_calls": llm_calls,
