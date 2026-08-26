@@ -62,8 +62,13 @@ flowchart TB
 
     Clients --> Backend
     Backend --> AI
-    AI --> Data
-    Backend --> Data
+    
+    %% Specific connections into the Data Layer
+    AI --> GROQ
+    AI --> EXT
+    AI --> TAVILY
+    Backend --> DB
+    Backend --> STRIPE
 ```
 
 ---
