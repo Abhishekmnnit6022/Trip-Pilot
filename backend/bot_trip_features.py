@@ -229,7 +229,10 @@ def _handle_show_itinerary(chat_id: int, message_id: int, trip_id: str, callback
             response = llm.invoke([HumanMessage(content=prompt)])
             
             # Clean response text and parse JSON
-            content = response.content.strip()
+            content_val = response.content
+            if isinstance(content_val, list):
+                content_val = " ".join(item.get("text", "") for item in content_val if isinstance(item, dict) and "text" in item)
+            content = str(content_val).strip()
             if content.startswith("```json"):
                 content = content[7:-3]
             elif content.startswith("```"):

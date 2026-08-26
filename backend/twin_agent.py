@@ -1,9 +1,10 @@
 import os
 import json
 import logging
-from groq import AsyncGroq
+from langchain_core.messages import HumanMessage
 from supabase import create_client
 from dotenv import load_dotenv
+from backend.llm_factory import get_llm
 
 load_dotenv('.env')
 log = logging.getLogger(__name__)
@@ -11,7 +12,7 @@ log = logging.getLogger(__name__)
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
 _supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-groq_client = AsyncGroq(api_key=os.environ.get("GROQ_API_KEY"))
+llm_client = get_llm()
 
 async def update_travel_twin(user_id: str, new_event: str):
     """
@@ -47,15 +48,16 @@ Rules:
 4. Add exactly 1 new short, insightful string to the 'insights' array (max 5 insights total, remove oldest if needed) explaining what you learned.
 5. Return ONLY a valid JSON object matching this schema. NO markdown wrapping, NO extra text.
 """
-        print(f"DEBUG: Sending prompt to Groq...")
-        response = await groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1
+        print(f"DEBUG: Sending prompt to Gemini...")
+        response = await llm_client.ainvoke(
+            [HumanMessage(content=prompt)]
         )
-        print(f"DEBUG: Received response from Groq")
+        print(f"DEBUG: Received response from Gemini")
         
-        output = response.choices[0].message.content.strip()
+        content_val = response.content
+        if isinstance(content_val, list):
+            content_val = " ".join(item.get("text", "") for item in content_val if isinstance(item, dict) and "text" in item)
+        output = str(content_val).strip()
         # Clean markdown if present
         if output.startswith("```"):
             output = output.split("```")[1]

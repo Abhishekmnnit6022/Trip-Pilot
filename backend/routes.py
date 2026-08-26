@@ -239,12 +239,10 @@ def update_profile(body: ProfileUpdate, user: dict = Depends(get_current_user)):
 
 def _generate_pnr() -> str:
     """
-    Generate a realistic 8-character PNR / confirmation number.
-
-    Returns:
-        An uppercase alphanumeric string like "A3F8B1C2".
+    Generate a 15-digit PNR / confirmation number.
     """
-    return uuid.uuid4().hex[:8].upper()
+    import random
+    return "".join(str(random.randint(0, 9)) for _ in range(15))
 
 
 @router.post("/book", response_model=BookingResponse)

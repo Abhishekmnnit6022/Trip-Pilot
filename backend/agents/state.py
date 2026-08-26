@@ -55,3 +55,8 @@ class TravelState(TypedDict):
     budget_limit: int            # Budget optimizer: user's max budget in INR
     optimization_count: int      # Budget optimizer: loop counter (max 2)
     travel_twin_profile: dict    # User's learned travel twin profile
+    transport_preference: str    # "train" | "flight" — user's chosen mode
+    train_tier: str              # "1A" | "2A" | "3A" | "SL" | "CC"
+    auto_booked_transport: str   # JSON of auto-booked transport details
+    auto_booked_hotel: str       # JSON of auto-booked hotel details
+    booking_status: str          # "confirmed" | "waiting" | "failed"

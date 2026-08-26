@@ -15,7 +15,12 @@ _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(_env_path)
 
 # ── API Keys ─────────────────────────────────────────────────────────────────
+LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini").strip().lower()
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "").strip()
+GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip()
+OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "").strip()
+OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "").strip()
+ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "").strip()
 AVIATIONSTACK_API_KEY: str = os.getenv("AVIATIONSTACK_API_KEY", "").strip()
 TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", "").strip()
 RAPIDAPI_KEY: str = os.getenv("RAPIDAPI", "").strip()
@@ -34,7 +39,8 @@ TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", "").strip()
 
 # ── LLM ──────────────────────────────────────────────────────────────────────
-LLM_MODEL: str = "llama-3.3-70b-versatile"
+GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip()
+LLM_MODEL: str = "gemini-3.6-flash"
 
 # ── Frontend ─────────────────────────────────────────────────────────────────
 FRONTEND_URL: str = os.getenv("FRONTEND_URL", "").strip()

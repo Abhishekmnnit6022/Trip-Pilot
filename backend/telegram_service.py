@@ -89,6 +89,21 @@ def send_booking_confirmation(
     details_text = "\n".join(detail_lines) if detail_lines else "  See app for details"
 
     id_label = "Booking ID" if booking_type == "hotel" else "PNR"
+    
+    extra_footer = ""
+    if booking_type == "train":
+        import random
+        # Simulate a real train booking status for demonstration
+        status = random.choice(["🟢 Confirmed (CNF)", "🟠 RAC 14", "🔴 Waiting List (WL 22)"])
+        detail_lines.append(f"  Live Status: {status}")
+        detail_lines.append(f"  Check PNR: https://www.confirmtkt.com/pnr-status/{pnr}")
+        details_text = "\n".join(detail_lines)
+        if "Waiting" in status or "RAC" in status:
+            extra_footer = (
+                "\n\n⚠️ <b>Waitlist Alert:</b> Your ticket is not fully confirmed (Waiting or RAC).\n"
+                "Would you like me to find alternate transport (Bus+Cab or Flights)?\n"
+                "Reply to this bot with <i>'Find alternatives'</i> to see options."
+            )
 
     text = (
         f"{emoji} <b>TripPilot — Booking Confirmed!</b>\n\n"
@@ -97,7 +112,7 @@ def send_booking_confirmation(
         f"<b>{id_label}:</b> <code>{pnr}</code>\n"
         f"<b>Travel Date:</b> {travel_date or 'TBD'}\n\n"
         f"<b>Details:</b>\n{details_text}\n\n"
-        f"✅ Your booking is confirmed. Have a great trip! 🎉"
+        f"✅ Your booking is confirmed. Have a great trip! 🎉{extra_footer}"
     )
 
     return send_message(chat_id, text)

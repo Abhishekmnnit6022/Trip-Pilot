@@ -6,15 +6,15 @@ Returns structured data for the frontend to render as cards.
 import json
 import logging
 import requests
-from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
-from backend.config import RAPIDAPI_KEY, LLM_MODEL
+from backend.config import RAPIDAPI_KEY
 from backend.tools.tavily_tool import search_hotels as tavily_hotel_search
 from backend.tools.booking_links import get_booking_hotel_url, get_makemytrip_hotel_url
+from backend.llm_factory import get_llm
 
 log = logging.getLogger(__name__)
 
-_llm = ChatGroq(model=LLM_MODEL)
+_llm = get_llm()
 
 RAPIDAPI_HOST = "booking-com15.p.rapidapi.com"
 DESTINATION_URL = f"https://{RAPIDAPI_HOST}/api/v1/hotels/searchDestination"
@@ -151,17 +151,17 @@ def _search_rapidapi(
 
 _PARSE_PROMPT = """\
 You are a data extraction assistant. Given raw web search results about hotels,
-extract a JSON array of hotel objects.
+extract a JSON object containing an array of hotel objects under the key "hotels".
 
-Each object MUST have these keys:
+Each hotel object MUST have these keys:
   - name: string (The exact name of the hotel)
   - rating: string or number (e.g. 4.5 or 9.2, use "N/A" if unknown)
   - rating_word: string (e.g. "Excellent", "Good", use "N/A" if unknown)
   - price: integer (IMPORTANT: MUST be a plain integer in INR. Do not include '₹', commas, or '/night'. Estimate if foreign currency. If unknown, estimate based on hotel quality.)
   - amenities: string (e.g. "WiFi, Pool", max 3 words. Use "N/A" if unknown)
 
-Return ONLY a valid JSON array. No markdown, no explanation.
-If you cannot find any hotels, return an empty array: []
+Return ONLY a valid JSON object like {"hotels": [...]}. No markdown, no explanation.
+If you cannot find any hotels, return {"hotels": []}
 """
 
 
@@ -186,14 +186,18 @@ def _search_tavily_fallback(
                 ),
             ]
         )
-        content = response.content.strip()
+        content_val = response.content
+        if isinstance(content_val, list):
+            content_val = " ".join(item.get("text", "") for item in content_val if isinstance(item, dict) and "text" in item)
+        content = str(content_val).strip()
         if content.startswith("```json"):
             content = content[7:-3]
         elif content.startswith("```"):
             content = content[3:-3]
         content = content.strip()
         
-        hotels = json.loads(content)
+        parsed = json.loads(content)
+        hotels = parsed.get("hotels", []) if isinstance(parsed, dict) else parsed
         if not isinstance(hotels, list):
             hotels = []
     except (json.JSONDecodeError, Exception) as exc:

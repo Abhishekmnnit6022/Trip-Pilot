@@ -3,70 +3,104 @@ Agent node functions for the LangGraph travel-planning pipeline.
 
 Node summary
 ------------
-router_agent        — parses user message, extracts info, decides next step
-flight_agent        — searches flights via AviationStack
-train_agent         — searches trains via Tavily + LLM
-hotel_agent         — searches hotels via RapidAPI / Tavily
-return_agent        — searches return transport
-itinerary_agent     — generates day-by-day itinerary
-present_results     — composes a friendly summary of search results
-final_agent         — builds the complete trip plan
+router_agent           — parses user message, extracts info, decides next step in the guided flow
+ask_user_agent         — pauses execution to prompt the user for missing details or payment
+auto_book_train_agent  — selects best train based on profile, prompts for manual payment via BookingModal
+auto_book_flight_agent — selects best flight based on profile, prompts for manual payment
+auto_book_hotel_agent  — selects best hotel based on profile, prompts for manual payment
+offer_alternate_agent  — triggered when train is waitlisted, offers alternate transport combos
+generate_itinerary     — builds day-by-day JSON itinerary using Unsplash images and strict schema
 """
 
 import json
 import logging
 from datetime import datetime, timedelta
 
-from langchain_groq import ChatGroq
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from backend.config import LLM_MODEL
+from backend.config import LLM_MODEL, GEMINI_API_KEY
 from backend.agents.state import TravelState
 from backend.tools.flight_tool import search_flights, format_flights_text
 from backend.tools.train_tool import search_trains_structured, format_trains_text
 from backend.tools.hotel_tool import search_hotels_structured, format_hotels_text
 from backend.tools.tavily_tool import search_attractions
 from backend.tools.weather_tool import get_weather_forecast
+from backend.llm_factory import get_llm
 
 log = logging.getLogger(__name__)
 
-llm = ChatGroq(model=LLM_MODEL)
+llm = get_llm()
+
+def extract_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(item.get("text", "") for item in content if isinstance(item, dict) and "text" in item)
+    return str(content)
+
+def clean_llm_json(raw: str) -> str:
+    """
+    Strip Qwen/thinking-model <think>...</think> blocks and extract the
+    outermost JSON object or array from the remaining text.
+    Works for both {} and [] payloads.
+    """
+    import re
+    # Remove <think>...</think> blocks (including nested)
+    cleaned = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+    # Try to find outermost JSON object
+    m = re.search(r'\{.*\}', cleaned, re.DOTALL)
+    if m:
+        return m.group(0)
+    # Fallback: try array
+    m = re.search(r'\[.*\]', cleaned, re.DOTALL)
+    if m:
+        return m.group(0)
+    return cleaned
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. ROUTER AGENT
 # ─────────────────────────────────────────────────────────────────────────────
 
 _ROUTER_SYSTEM = """\
-You are a travel-planning assistant. Analyze the FULL conversation so far and
-the latest user message to extract travel details and decide the next action.
+You are a travel-planning concierge. Analyze the FULL conversation and the
+latest user message to extract travel details and decide the next action.
 
 Current known state:
-- Origin:       {origin}
-- Destination:  {destination}
-- Start date:   {start_date}
-- End date:     {end_date}
-- Num days:     {num_days}
-- Budget:       {budget}
-- Travel mode:  {travel_mode}
-- Has flights:  {has_flights}
-- Has trains:   {has_trains}
-- Has hotels:   {has_hotels}
-- Has itinerary:{has_itinerary}
+- Origin:              {origin}
+- Destination:         {destination}
+- Start date:          {start_date}
+- End date:            {end_date}
+- Num days:            {num_days}
+- Budget:              {budget}
+- Transport pref:      {transport_preference}
+- Train tier:          {train_tier}
+- Has transport booked:{has_transport}
+- Booking status:      {booking_status}
+- Has hotel booked:    {has_hotel}
+- Has itinerary:       {has_itinerary}
 
-Rules:
+Rules (follow IN ORDER):
 1. Extract any NEW info from the latest message (city names, dates, preferences).
-2. For dates like "next Monday" or "tomorrow", compute the actual date relative
-   to today ({today}).
-3. If destination is missing → ask for it.
-4. If origin is missing → ask where they are traveling from.
-5. If dates are missing → ask when they want to travel.
-6. If origin + destination + dates are all known AND no search done yet → action = "search_all"
-7. If the user asks for return tickets → action = "search_return"
-8. If search results exist and user wants itinerary → action = "generate_itinerary"
-9. CRITICAL RESTRICTION: If `{destination}` is already known, and the user asks to plan a completely new trip to a DIFFERENT destination, DO NOT extract the new destination. Set action = "respond" and politely tell them: "It looks like you are trying to plan a new trip to a different destination! To keep everything organized and ensure flights/trains are booked correctly, please click 'Plan New Trip' in the left menu to start a fresh chat for this new trip."
-10. EXCEPTION to rule 9: The user CAN ask for different hotels, but ONLY if they are in the exact same `{destination}`. If they do, extract their new budget/preference into `budget` and set action = "search_hotels".
-11. If the user explicitly asks for different/cheaper/better hotels (e.g. "show cheaper hotels"), extract the budget constraint and set action = "search_hotels".
-12. For general questions / chit-chat → action = "respond"
+2. For dates like "next Monday" or "tomorrow", compute actual date relative to today ({today}).
+3. If destination is missing → ask for it. action = "ask_user"
+4. If origin is missing → ask where they are traveling from. action = "ask_user"
+5. If dates are missing → ask when they want to travel. action = "ask_user"
+6. If origin + destination + dates are known BUT transport_preference is empty → ask: "Would you like to travel by 🚂 Train or ✈️ Flight?" action = "ask_user"
+7. If transport_preference = "train" AND train_tier is empty → ask: "Which class do you prefer? 1A (First AC), 2A (Second AC), 3A (Third AC), SL (Sleeper), or CC (Chair Car)?" action = "ask_user"
+8. If transport_preference = "train" AND train_tier is known AND no transport booked → action = "auto_book_train"
+9. If transport_preference = "flight" AND no transport booked → action = "auto_book_flight"
+10. If booking_status = "waiting" and user says they want alternative transport → action = "offer_alternate"
+11. If booking_status = "waiting" and user says keep waiting or declines alternate → move on to ask about hotel. action = "ask_hotel"
+12. If transport IS booked AND no hotel booked AND user hasn't been asked about hotel yet → ask: "Would you also like me to book a hotel? If yes, any specific preferences or budget?" action = "ask_hotel"
+13. If user says YES to hotel (or provides hotel preferences/budget) → action = "auto_book_hotel"
+14. If user says NO to hotel → action = "generate_itinerary"
+15. If hotel IS booked AND no itinerary yet → action = "generate_itinerary"
+16. If user wants return tickets → action = "search_return"
+17. If itinerary exists and user asks to regenerate → action = "generate_itinerary"
+18. CRITICAL: If user says "train" or "flight" when asked about transport mode, extract it into transport_preference.
+19. CRITICAL: If user mentions a class/tier (like "sleeper", "AC", "3A", "first class"), extract it into train_tier. Map: sleeper→SL, first AC/1AC→1A, second AC/2AC→2A, third AC/3AC→3A, chair car/CC→CC.
+20. CRITICAL: If the user message says "Payment completed successfully", determine if it was for transport or hotel. If it was transport, set `paid_transport` to true. If hotel, set `paid_hotel` to true. Acknowledge the payment and move to the next phase (ask_hotel or generate_itinerary).
+21. For general questions / chit-chat → action = "respond"
 
 Respond with ONLY valid JSON (no markdown):
 {{
@@ -76,8 +110,11 @@ Respond with ONLY valid JSON (no markdown):
   "end_date": "<YYYY-MM-DD or null>",
   "num_days": <int or null>,
   "budget": "<string or null>",
-  "travel_mode": "<flight|train|both or null>",
-  "action": "<ask_user|search_all|search_return|search_hotels|generate_itinerary|respond>",
+  "transport_preference": "<train|flight or null>",
+  "train_tier": "<1A|2A|3A|SL|CC or null>",
+  "paid_transport": <true or false>,
+  "paid_hotel": <true or false>,
+  "action": "<ask_user|auto_book_train|auto_book_flight|ask_hotel|auto_book_hotel|generate_itinerary|search_return|offer_alternate|respond>",
   "response": "<your natural-language reply to the user>"
 }}
 """
@@ -91,10 +128,11 @@ def router_agent(state: TravelState) -> dict:
     end_date = state.get("end_date", "") or ""
     num_days = state.get("num_days", 0) or 0
     budget = state.get("budget", "") or ""
-    travel_mode = state.get("travel_mode", "") or ""
-    flight_results = state.get("flight_results", "") or ""
-    train_results = state.get("train_results", "") or ""
-    hotel_results = state.get("hotel_results", "") or ""
+    transport_preference = state.get("transport_preference", "") or ""
+    train_tier = state.get("train_tier", "") or ""
+    auto_booked_transport = state.get("auto_booked_transport", "") or ""
+    auto_booked_hotel = state.get("auto_booked_hotel", "") or ""
+    booking_status = state.get("booking_status", "") or ""
     itinerary = state.get("itinerary", "") or ""
 
     system_prompt = _ROUTER_SYSTEM.format(
@@ -104,10 +142,11 @@ def router_agent(state: TravelState) -> dict:
         end_date=end_date or "unknown",
         num_days=num_days or "unknown",
         budget=budget or "unknown",
-        travel_mode=travel_mode or "unknown",
-        has_flights=bool(flight_results),
-        has_trains=bool(train_results),
-        has_hotels=bool(hotel_results),
+        transport_preference=transport_preference or "not chosen yet",
+        train_tier=train_tier or "not chosen yet",
+        has_transport=bool(auto_booked_transport),
+        booking_status=booking_status or "none",
+        has_hotel=bool(auto_booked_hotel),
         has_itinerary=bool(itinerary),
         today=datetime.now().strftime("%Y-%m-%d"),
     )
@@ -122,17 +161,16 @@ def router_agent(state: TravelState) -> dict:
 
     # Parse the JSON response
     try:
-        content = response.content.strip()
-        if content.startswith("```json"):
-            content = content[7:-3]
-        elif content.startswith("```"):
-            content = content[3:-3]
-        content = content.strip()
-        parsed = json.loads(content)
+        content_str = clean_llm_json(extract_text(response.content))
+        parsed = json.loads(content_str)
+        log.info("[ROUTER] action=%s origin=%s dest=%s transport=%s",
+                 parsed.get('action'), parsed.get('origin'), parsed.get('destination'),
+                 parsed.get('transport_preference'))
     except json.JSONDecodeError:
+        log.warning("[ROUTER] LLM did not return valid JSON — treating as chat response")
         # If LLM didn't return valid JSON, treat as a general response
         return {
-            "messages": [AIMessage(content=response.content)],
+            "messages": [AIMessage(content=extract_text(response.content))],
             "phase": "respond",
             "needs_input": "",
             "llm_calls": llm_calls,
@@ -164,14 +202,22 @@ def router_agent(state: TravelState) -> dict:
                 pass
     if parsed.get("budget") and not budget:
         updates["budget"] = parsed["budget"]
-    if parsed.get("travel_mode") and not travel_mode:
-        updates["travel_mode"] = parsed["travel_mode"]
+    if parsed.get("transport_preference") and not transport_preference:
+        updates["transport_preference"] = parsed["transport_preference"]
+    if parsed.get("train_tier") and not train_tier:
+        updates["train_tier"] = parsed["train_tier"]
+
+    # Handle manual payment completion
+    if parsed.get("paid_transport"):
+        updates["auto_booked_transport"] = "paid"
+    if parsed.get("paid_hotel"):
+        updates["auto_booked_hotel"] = "paid"
 
     action = parsed.get("action", "respond")
     reply = parsed.get("response", "I can help you plan your trip!")
 
     updates["phase"] = action
-    updates["needs_input"] = "yes" if action == "ask_user" else ""
+    updates["needs_input"] = "yes" if action in ("ask_user", "ask_hotel") else ""
     updates["messages"] = [AIMessage(content=reply)]
 
     return updates
@@ -390,23 +436,46 @@ The user's Travel Twin Profile (learned from past behavior) is:
 {weather_text}
 
 Instructions:
-1. Generate a day-by-day itinerary.
-2. IMPORTANT: Tailor the activities to match the user's Travel Twin (e.g., if 'early_mornings' is 'low', start activities later. If 'walking_tolerance' is 'low', suggest cabs).
+1. Generate a detailed day-by-day itinerary.
+2. IMPORTANT: Tailor the activities to match the user's Travel Twin (e.g., if 'early_mornings' is 'low', start activities later).
 3. If weather indicates rain on a specific day, suggest indoor activities.
-4. Format using clean Markdown with day headers (e.g., ### Day 1: Arrival & Exploration).
-5. Output ONLY the itinerary text. No intro/outro.
+4. For each place, provide a realistic description, cost estimate, and timing.
+5. Provide a search query for an image of the place (e.g., "Triveni Sangam Prayagraj", "Eiffel Tower Paris").
+6. You MUST return EXACTLY this JSON structure and absolutely nothing else:
+{{
+  "days": [
+    {{
+      "day_number": 1,
+      "theme": "Brief Theme (e.g., ARRIVAL & SPIRITUAL SERENITY)",
+      "places": [
+        {{
+          "name": "Place Name",
+          "address": "Brief Address or Area",
+          "rating": 4.8,
+          "timing": "6:00 AM - 9:00 PM",
+          "cost": "Free or ₹500",
+          "description": "Short engaging description of the activity.",
+          "image_search_query": "high quality search query for unsplash"
+        }}
+      ]
+    }}
+  ]
+}}
 """
 
     response = llm.invoke(
         [
-            SystemMessage(content="You are an expert travel planner who creates detailed, practical itineraries."),
+            SystemMessage(content="You are an expert travel planner who creates detailed, practical itineraries and returns ONLY valid JSON."),
             HumanMessage(content=prompt),
         ]
     )
+    
+    # Clean the JSON
+    content = clean_llm_json(extract_text(response.content))
 
     return {
-        "itinerary": response.content,
-        "messages": [AIMessage(content="📋 Your itinerary is ready!")],
+        "itinerary": content.strip(),
+        "messages": [AIMessage(content="📋 Your custom trip plan is ready!")],
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
 
@@ -459,8 +528,9 @@ Keep it well-organized with clear headings and bullet points.
         ]
     )
 
+    msg_content = extract_text(response.content)
     return {
-        "messages": [response],
+        "messages": [AIMessage(content=msg_content)],
         "phase": "complete",
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
@@ -519,12 +589,7 @@ def budget_check_node(state: TravelState) -> dict:
             SystemMessage(content=_COST_EXTRACT_PROMPT),
             HumanMessage(content=f"Extract the total cost from this itinerary:\n\n{itinerary}"),
         ])
-        content = response.content.strip()
-        if content.startswith("```json"):
-            content = content[7:-3]
-        elif content.startswith("```"):
-            content = content[3:-3]
-        content = content.strip()
+        content = clean_llm_json(extract_text(response.content))
         parsed = json.loads(content)
         total_cost = int(parsed.get("total_cost_inr", 0))
     except (json.JSONDecodeError, ValueError, TypeError) as exc:
@@ -654,7 +719,7 @@ def budget_optimizer_node(state: TravelState) -> dict:
             SystemMessage(content="You are an expert budget travel optimizer. Your job is to reduce trip costs while maintaining a great travel experience."),
             HumanMessage(content=prompt),
         ])
-        content = response.content.strip()
+        content = extract_text(response.content).strip()
         if content.startswith("```json"):
             content = content[7:-3]
         elif content.startswith("```"):
@@ -689,6 +754,369 @@ def budget_optimizer_node(state: TravelState) -> dict:
         "total_estimated_cost": new_cost,
         "optimization_count": optimization_count + 1,
         "messages": [AIMessage(content=msg)],
+        "llm_calls": state.get("llm_calls", 0) + 1,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 11. AUTO-BOOK TRAIN AGENT
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _generate_pnr() -> str:
+    """Generate a 15-digit PNR number."""
+    import random
+    return "".join(str(random.randint(0, 9)) for _ in range(15))
+
+
+def _simulate_booking_status() -> str:
+    """Simulate a booking status (70% confirmed, 30% waiting)."""
+    import random
+    return "confirmed" if random.random() < 0.7 else "waiting"
+
+
+def _save_booking_to_supabase(user_id: str, booking_type: str, provider: str,
+                               pnr: str, travel_date: str, details: dict,
+                               status: str, trip_id: str = None) -> bool:
+    """Save a booking record to the Supabase bookings table."""
+    try:
+        from supabase import create_client
+        from backend.config import SUPABASE_URL, SUPABASE_ANON_KEY
+        sb = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        record = {
+            "user_id": user_id,
+            "booking_type": booking_type,
+            "provider_name": provider,
+            "pnr_or_confirmation_number": pnr,
+            "travel_date": travel_date,
+            "status": status,
+            "details": details,
+        }
+        if trip_id:
+            record["trip_id"] = trip_id
+        sb.table("bookings").insert(record).execute()
+        return True
+    except Exception as exc:
+        log.error("Failed to save booking to Supabase: %s", exc)
+        return False
+
+
+def _send_telegram_booking_notification(user_id: str, booking_type: str,
+                                         provider: str, pnr: str,
+                                         travel_date: str, details: dict,
+                                         status: str) -> None:
+    """Send booking notification via Telegram if user is linked."""
+    try:
+        from supabase import create_client
+        from backend.config import SUPABASE_URL, SUPABASE_ANON_KEY, TELEGRAM_BOT_TOKEN
+        if not TELEGRAM_BOT_TOKEN:
+            return
+        sb = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        resp = sb.table("user_profiles").select("telegram_chat_id").eq("id", user_id).execute()
+        if not resp.data or not resp.data[0].get("telegram_chat_id"):
+            return
+        chat_id = resp.data[0]["telegram_chat_id"]
+
+        emoji = {"flight": "✈️", "train": "🚂", "hotel": "🏨"}.get(booking_type, "📋")
+        status_emoji = "✅ Confirmed" if status == "confirmed" else "⏳ Waiting List"
+
+        detail_lines = []
+        if booking_type == "train":
+            detail_lines.append(f"  🚂 Train: {details.get('train_name', 'N/A')}")
+            detail_lines.append(f"  #️⃣ Number: {details.get('train_number', 'N/A')}")
+            detail_lines.append(f"  📍 From: {details.get('departure_station', 'N/A')}")
+            detail_lines.append(f"  📍 To: {details.get('arrival_station', 'N/A')}")
+            detail_lines.append(f"  🎫 Class: {details.get('class', 'N/A')}")
+        elif booking_type == "flight":
+            detail_lines.append(f"  ✈️ Airline: {details.get('airline', 'N/A')}")
+            detail_lines.append(f"  #️⃣ Flight: {details.get('flight_number', 'N/A')}")
+            detail_lines.append(f"  📍 From: {details.get('departure_airport', 'N/A')}")
+            detail_lines.append(f"  📍 To: {details.get('arrival_airport', 'N/A')}")
+        elif booking_type == "hotel":
+            detail_lines.append(f"  🏨 Hotel: {details.get('name', 'N/A')}")
+            detail_lines.append(f"  ⭐ Rating: {details.get('rating', 'N/A')}")
+            price = details.get('price', 'N/A')
+            if isinstance(price, (int, float)):
+                price = f"₹{price:,.0f}"
+            detail_lines.append(f"  💰 Price: {price}")
+
+        details_text = "\n".join(detail_lines)
+        text = (
+            f"{emoji} <b>TripPilot — Auto-Booked!</b>\n\n"
+            f"<b>Type:</b> {booking_type.title()}\n"
+            f"<b>Provider:</b> {provider}\n"
+            f"<b>PNR:</b> <code>{pnr}</code>\n"
+            f"<b>Status:</b> {status_emoji}\n"
+            f"<b>Date:</b> {travel_date or 'TBD'}\n\n"
+            f"<b>Details:</b>\n{details_text}\n\n"
+            f"{'🎉 Your booking is confirmed! Have a great trip!' if status == 'confirmed' else '⏳ Your ticket is on the waiting list. We will notify you when confirmed.'}"
+        )
+
+        import requests as req
+        API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/"
+        req.post(API_URL + "sendMessage", json={
+            "chat_id": chat_id, "text": text, "parse_mode": "HTML"
+        }, timeout=10)
+    except Exception as exc:
+        log.warning("Failed to send Telegram booking notification: %s", exc)
+
+
+def auto_book_train_agent(state: TravelState) -> dict:
+    """Search trains, pick the best one, and wait for payment."""
+    origin = state.get("origin", "")
+    destination = state.get("destination", "")
+    date = state.get("start_date", "")
+    tier = state.get("train_tier", "SL")
+    twin = state.get("travel_twin_profile", {})
+
+    log.info("Searching trains: %s → %s on %s (class: %s)", origin, destination, date, tier)
+    trains = search_trains_structured(origin, destination, date)
+
+    if not trains:
+        return {
+            "messages": [AIMessage(content=(
+                f"😔 I couldn't find any trains from {origin} to {destination} on {date}. "
+                "Would you like me to search for flights instead?"
+            ))],
+            "phase": "ask_user",
+            "needs_input": "yes",
+            "llm_calls": state.get("llm_calls", 0) + 1,
+        }
+
+    # Use LLM to pick the best train based on user preferences
+    train_list_text = json.dumps(trains, indent=2)
+    pick_prompt = f"""Pick the BEST train from this list for a traveler who prefers class {tier}.
+Travel Twin profile: {json.dumps(twin, indent=2)}
+
+Trains available:
+{train_list_text}
+
+Return ONLY JSON: {{"selected_index": <0-based index of best train>, "reason": "<brief reason>"}}"""
+
+    try:
+        response = llm.invoke([
+            SystemMessage(content="You are a train booking expert. Pick the best train."),
+            HumanMessage(content=pick_prompt),
+        ])
+        content = extract_text(response.content).strip()
+        if content.startswith("```json"):
+            content = content[7:-3]
+        elif content.startswith("```"):
+            content = content[3:-3]
+        parsed = json.loads(content.strip())
+        idx = int(parsed.get("selected_index", 0))
+        reason = parsed.get("reason", "Best available option")
+    except Exception:
+        idx = 0
+        reason = "Selected the first available train"
+
+    if idx >= len(trains):
+        idx = 0
+    selected = trains[idx]
+    msg = (
+        f"🚂 **I have selected the best train based on your preferences!**\n\n"
+        f"**{selected.get('train_name', 'Express')}** (#{selected.get('train_number', '')})\n"
+        f"📍 {selected.get('departure_station', origin)} → {selected.get('arrival_station', destination)}\n"
+        f"🕐 {selected.get('departure_time', '')} — {selected.get('arrival_time', '')}\n"
+        f"⏱️ Duration: {selected.get('duration', 'N/A')}\n"
+        f"🎫 Class: **{tier}**\n\n"
+        f"💡 _{reason}_\n\n"
+        f"Please click **Book Now** on the card below to manually complete the payment."
+    )
+
+    result = {
+        "train_results": json.dumps([selected]),
+        "messages": [AIMessage(content=msg)],
+        "phase": "ask_user",
+        "needs_input": "yes",
+        "llm_calls": state.get("llm_calls", 0) + 1,
+    }
+
+    return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 12. AUTO-BOOK FLIGHT AGENT
+# ─────────────────────────────────────────────────────────────────────────────
+
+def auto_book_flight_agent(state: TravelState) -> dict:
+    """Search flights, pick the best one based on Travel Twin, and auto-book."""
+    origin = state.get("origin", "")
+    destination = state.get("destination", "")
+    date = state.get("start_date", "")
+    twin = state.get("travel_twin_profile", {})
+
+    log.info("Auto-booking flight: %s → %s on %s", origin, destination, date)
+    flights = search_flights(origin, destination, date)
+
+    if not flights:
+        return {
+            "messages": [AIMessage(content=(
+                f"✈️ No flights found from {origin} to {destination} on {date}.\n\n"
+                "Would you like to proceed with a **train** instead? "
+                "If yes, which class do you prefer? (1A, 2A, 3A, SL, CC)"
+            ))],
+            "phase": "ask_user",
+            "needs_input": "yes",
+            "transport_preference": "",  # Reset so user can choose train
+            "llm_calls": state.get("llm_calls", 0),
+        }
+
+    # Pick best flight based on Twin preferences
+    selected = flights[0]  # Default to first
+
+    if len(flights) > 1 and twin:
+        budget_sensitivity = twin.get("budget_sensitivity", "medium")
+        if budget_sensitivity == "low":
+            # User doesn't care about budget → pick premium/first available
+            selected = flights[0]
+        else:
+            selected = flights[-1]  # Usually cheapest is last
+
+    msg = (
+        f"✈️ **I have selected the best flight based on your preferences!**\n\n"
+        f"**{selected.get('airline', 'Airline')}** ({selected.get('flight_number', '')})\n"
+        f"📍 {selected.get('departure_airport', origin)} → {selected.get('arrival_airport', destination)}\n"
+        f"🕐 Departs: {selected.get('departure_time', 'N/A')}\n"
+        f"🛬 Arrives: {selected.get('arrival_time', 'N/A')}\n\n"
+        f"Please click **Book Now** on the card below to manually complete the payment."
+    )
+
+    return {
+        "flight_results": json.dumps([selected]),
+        "messages": [AIMessage(content=msg)],
+        "phase": "ask_user",
+        "needs_input": "yes",
+        "llm_calls": state.get("llm_calls", 0) + 1,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 13. AUTO-BOOK HOTEL AGENT
+# ─────────────────────────────────────────────────────────────────────────────
+
+def auto_book_hotel_agent(state: TravelState) -> dict:
+    """Search hotels, pick the best one based on preferences, and auto-book."""
+    destination = state.get("destination", "")
+    checkin = state.get("start_date", "")
+    checkout = state.get("end_date", "")
+    budget = state.get("budget", "")
+    twin = state.get("travel_twin_profile", {})
+
+    log.info("Auto-booking hotel in %s (%s to %s)", destination, checkin, checkout)
+    hotels = search_hotels_structured(destination, checkin, checkout, budget)
+
+    if not hotels:
+        return {
+            "messages": [AIMessage(content=(
+                f"🏨 I couldn't find hotels in {destination} for your dates. "
+                "Let me proceed with generating your itinerary instead!"
+            ))],
+            "phase": "generate_itinerary",
+            "llm_calls": state.get("llm_calls", 0),
+        }
+
+    # Pick best hotel: highest rating within budget
+    def _parse_rating(r):
+        try:
+            return float(r)
+        except (ValueError, TypeError):
+            return 0.0
+
+    sorted_hotels = sorted(hotels, key=lambda h: _parse_rating(h.get("rating")), reverse=True)
+    selected = sorted_hotels[0]
+
+    price = selected.get("price", selected.get("price_per_night", "N/A"))
+    if isinstance(price, (int, float)):
+        price_str = f"₹{price:,.0f}/night"
+    else:
+        price_str = str(price)
+
+    msg = (
+        f"🏨 **I have selected the best hotel based on your preferences!**\n\n"
+        f"**{selected.get('name', selected.get('hotel_name', 'Hotel'))}**\n"
+        f"⭐ Rating: {selected.get('rating', 'N/A')}\n"
+        f"💰 Price: {price_str}\n"
+        f"📅 Check-in: {checkin}\n"
+        f"📅 Check-out: {checkout}\n\n"
+        f"Please click **Book Now** on the card below to manually complete the payment.\n\n"
+        f"**Would you like me to generate a personalized day-by-day itinerary for your trip now?**"
+    )
+
+    return {
+        "hotel_results": json.dumps([selected]),
+        "messages": [AIMessage(content=msg)],
+        "phase": "ask_user",
+        "needs_input": "yes",
+        "llm_calls": state.get("llm_calls", 0) + 1,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 14. ALTERNATE TRANSPORT AGENT (Waitlist Handler)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def offer_alternate_agent(state: TravelState) -> dict:
+    """Suggest alternate transport when train is on waiting list."""
+    origin = state.get("origin", "")
+    destination = state.get("destination", "")
+    date = state.get("start_date", "")
+
+    log.info("Searching alternate transport: %s → %s on %s", origin, destination, date)
+
+    # Use LLM to generate alternate transport suggestions
+    prompt = f"""The user's train from {origin} to {destination} on {date} is on the WAITING LIST.
+Suggest 2-3 realistic alternate transport combinations for traveling within India.
+
+Consider:
+- Bus + Cab combos (e.g., KSRTC/UPSRTC bus to nearest hub, then shared cab)
+- Direct bus services (RedBus, VRL, SRS)
+- Cab services (Ola Outstation, Uber Intercity)
+- Alternate train routes (connecting trains)
+
+For each option provide:
+- Mode combination (e.g., "Bus to Haridwar + Shared Cab to Rishikesh")
+- Approximate cost in INR
+- Approximate duration
+- Booking platform
+
+Return ONLY JSON array:
+[
+  {{"mode": "...", "cost_inr": 1500, "duration": "6h", "platform": "RedBus + Ola", "description": "..."}}
+]"""
+
+    try:
+        response = llm.invoke([
+            SystemMessage(content="You are an Indian transport expert. Suggest practical alternatives."),
+            HumanMessage(content=prompt),
+        ])
+        content = clean_llm_json(extract_text(response.content))
+        alternatives = json.loads(content)
+    except Exception:
+        alternatives = [
+            {"mode": f"Bus + Cab", "cost_inr": 2000, "duration": "8h",
+             "platform": "RedBus + Ola", "description": f"Take a bus from {origin} to nearest hub, then cab to {destination}"}
+        ]
+
+    # Format alternatives as a nice message
+    alt_text = "\n".join([
+        f"**Option {i+1}: {a['mode']}**\n"
+        f"  💰 ≈₹{a['cost_inr']:,} | ⏱️ {a['duration']} | 📱 {a['platform']}\n"
+        f"  _{a.get('description', '')}_\n"
+        for i, a in enumerate(alternatives)
+    ])
+
+    msg = (
+        f"🔄 **Alternate Transport Options**\n"
+        f"({origin} → {destination} on {date})\n\n"
+        f"{alt_text}\n"
+        f"Would you like to proceed with any of these options, or would you prefer to keep your waiting list ticket and hope it gets confirmed?\n\n"
+        f"You can also say **'book hotel'** to move on to hotel booking."
+    )
+
+    return {
+        "messages": [AIMessage(content=msg)],
+        "phase": "ask_user",
+        "needs_input": "yes",
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
 

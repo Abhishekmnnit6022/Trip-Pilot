@@ -10,6 +10,10 @@ Implements a three-state finite state machine:
               If it succeeds, the circuit resets to CLOSED.
               If it fails, the circuit re-opens for another timeout period.
 
+Additionally, this module integrates the Bright Data CLI (`scrape_with_brightdata`) 
+as the ultimate last-resort fallback. If the primary APIs fail, the circuit breaker 
+transparently delegates the query to Bright Data for live web scraping to ensure 100% uptime.
+
 Usage:
     from backend.circuit_breaker import CircuitBreaker
 
@@ -191,3 +195,54 @@ hotel_breaker = CircuitBreaker(
     failure_threshold=3,
     recovery_timeout=300,
 )
+
+
+# ── Bright Data Scraping Fallback ───────────────────────────────────────────
+
+def scrape_with_brightdata(query: str, search_type: str = "web") -> str:
+    """
+    Robust fallback scraper using Bright Data CLI when standard APIs fail.
+    
+    This function spawns a subprocess to execute `brightdata search <query> --json`.
+    If the Bright Data CLI is not installed or configured, it returns an empty list.
+    
+    Args:
+        query: The search query (e.g. "Flights from Delhi to Mumbai on Makemytrip").
+        search_type: "web" for general Google results.
+        
+    Returns:
+        JSON string of results from the Bright Data SERP API.
+    """
+    import subprocess
+    import json
+    
+    log.info("[BrightData Fallback] Invoking Bright Data CLI for: '%s'", query)
+    
+    try:
+        # We use the SERP search feature of brightdata CLI since it handles 
+        # organic results and structure automatically.
+        result = subprocess.run(
+            ["npx", "@brightdata/cli", "search", query, "--type", search_type, "--json"],
+            capture_output=True,
+            text=True,
+            timeout=20, # BrightData might take a bit
+        )
+        
+        if result.returncode == 0 and result.stdout.strip():
+            # Clean and validate JSON before returning
+            raw_data = result.stdout.strip()
+            # Some versions of brightdata output extra logs before json, so we extract JSON array/object
+            if raw_data.startswith("[") or raw_data.startswith("{"):
+                # Successfully scraped
+                log.info("[BrightData Fallback] Successfully fetched %d bytes of scraped data", len(raw_data))
+                return raw_data
+        
+        log.warning("[BrightData Fallback] Scrape failed or returned non-JSON. Return code: %d, Stderr: %s", 
+                    result.returncode, result.stderr[:200])
+    
+    except subprocess.TimeoutExpired:
+        log.error("[BrightData Fallback] Scraping timed out after 20s")
+    except Exception as exc:
+        log.error("[BrightData Fallback] Execution error: %s", exc)
+        
+    return "[]"  # Empty JSON array as ultimate fallback

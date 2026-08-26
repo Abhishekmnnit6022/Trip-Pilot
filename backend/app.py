@@ -113,6 +113,18 @@ async def health():
     return {"status": "ok", "pipeline": _compiled_app is not None}
 
 
+@app.get("/api/cron/reminders")
+async def trigger_reminders():
+    """Endpoint for triggering the cron job on deployed sites (e.g. via cron-job.org)."""
+    from backend.scheduler import check_and_send_reminders
+    try:
+        check_and_send_reminders()
+        return {"status": "success", "message": "Reminders checked and sent"}
+    except Exception as exc:
+        log.error("Cron endpoint failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @app.post("/api/new-session", response_model=NewSessionResponse)
 async def new_session(user: dict = Depends(get_current_user)):
     """Create a fresh conversation thread tied to the authenticated user."""
@@ -192,6 +204,8 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
     thread_id = req.thread_id or f"{user['user_id']}_{uuid.uuid4().hex[:8]}"
     config = {"configurable": {"thread_id": thread_id}}
 
+    log.info("[CHAT] user=%s thread=%s message='%s'", user['user_id'][:8], thread_id, req.message[:60])
+
     # Determine if this is the first message (no checkpoint yet)
     try:
         existing = _compiled_app.get_state(config)
@@ -237,6 +251,11 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
             "budget_limit": 0,
             "optimization_count": 0,
             "travel_twin_profile": {},
+            "transport_preference": "",
+            "train_tier": "",
+            "auto_booked_transport": "",
+            "auto_booked_hotel": "",
+            "booking_status": "",
         }
         
         # Fetch and inject Travel Twin profile
@@ -276,6 +295,7 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
 
         thread = threading.Thread(target=_run_graph, daemon=True)
         thread.start()
+        log.info("[SSE] Stream started. thread_id=%s", thread_id)
 
         while True:
             try:
@@ -286,6 +306,7 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
                 break
 
             if kind == "error":
+                log.error("[SSE] Graph error: %s", payload)
                 yield {"event": "error", "data": json.dumps({"detail": payload})}
                 break
 
@@ -314,6 +335,8 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
 
             if kind == "chunk":
                 for node_name, state_update in payload.items():
+                    if state_update is None:
+                        state_update = {}
                     # Notify that this agent started
                     yield {
                         "event": "agent_start",

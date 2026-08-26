@@ -8,15 +8,16 @@ import logging
 from functools import lru_cache
 
 import requests
-from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
-from backend.config import LLM_MODEL, RAILRADAR_API_KEY
+from backend.config import RAILRADAR_API_KEY
 from backend.tools.tavily_tool import search_trains as tavily_train_search
+from backend.circuit_breaker import scrape_with_brightdata
 from backend.tools.booking_links import get_irctc_url
+from backend.llm_factory import get_llm
 
 log = logging.getLogger(__name__)
 
-_llm = ChatGroq(model=LLM_MODEL)
+_llm = get_llm()
 
 RAILRADAR_API_BASE = "https://api.railradar.in/v1"
 
@@ -47,7 +48,7 @@ CITY_STATION_ALIASES = {
     "hazaribagh": "HZBN", "bokaro": "BKSC", "deoghar": "DGHR", "darbhanga": "DBG", "muzaffarpur": "MFP",
     "rajgir": "RGD", "imphal": "TSE", "agartala": "AGTL", "aizawl": "BHRB", "kohima": "DMV",
     "itanagar": "NHLN", "tezpur": "TZTB", "jorhat": "JT", "lakhimpur": "NLP", "gangtok": "NJP",
-    "mathura": "MTJ", "vrindavan": "MTJ", "haridwar": "HW", "rishikesh": "RKSH", "aligarh": "ALJN",
+    "mathura": "MTJ", "vrindavan": "MTJ", "haridwar": "HW", "rishikesh": "HW", "aligarh": "ALJN",
     "jhansi": "VGLJ", "ujjain": "UJN", "somnath": "SMNH", "dwarka": "DWK", "rameshwaram": "RMM",
     "ooty": "UAM", "kodaikanal": "KQN", "munnar": "AWY", "wayanad": "CLT", "hampi": "HPT",
     "khajuraho": "KURJ", "puri": "PURI", "konark": "PURI", "mahabaleshwar": "PUNE", "lonavala": "LNL"
@@ -55,9 +56,9 @@ CITY_STATION_ALIASES = {
 
 _PARSE_PROMPT = """\
 You are a data extraction assistant. Given raw web search results about
-Indian trains, extract a JSON array of train objects.
+Indian trains, extract a JSON object containing an array of train objects under the key "trains".
 
-Each object MUST have these keys (use "N/A" for unknown values):
+Each train object MUST have these keys (use "N/A" for unknown values):
   - train_name: string
   - train_number: string
   - departure_station: string
@@ -68,8 +69,8 @@ Each object MUST have these keys (use "N/A" for unknown values):
   - classes: string (e.g. "SL, 3A, 2A, 1A")
   - runs_on: string (e.g. "Mon, Wed, Fri" or "Daily")
 
-Return ONLY a valid JSON array. No markdown, no explanation.
-If you cannot find any trains, return an empty array: []
+Return ONLY a valid JSON object like {"trains": [...]}. No markdown, no explanation.
+If you cannot find any trains, return {"trains": []}
 """
 
 
@@ -212,8 +213,15 @@ def search_trains_structured(
     if railradar_results:
         return railradar_results
 
-    log.info("RailRadar returned no results or is unavailable; falling back to Tavily train search")
-    raw_results = tavily_train_search(origin, destination, date)
+    log.info("RailRadar returned no results or is unavailable; attempting Bright Data CLI fallback")
+    
+    # Try BrightData first, it's the ultimate fallback
+    query = f"trains from {origin} to {destination} on {date} schedule site:confirmtkt.com OR site:trainman.in"
+    raw_results = scrape_with_brightdata(query)
+    
+    if not raw_results:
+        log.info("Bright Data failed, falling back to Tavily train search")
+        raw_results = tavily_train_search(origin, destination, date)
 
     if not raw_results or raw_results == "No results found.":
         log.info("No train search results for %s → %s", origin, destination)
@@ -227,12 +235,16 @@ def search_trains_structured(
                     content=(
                         f"Extract train information from these search results "
                         f"for trains from {origin} to {destination}:\n\n"
-                        f"{raw_results}"
+                        f"{raw_results[:2000]}" # limit size to avoid blowing up context/logs
                     )
                 ),
             ]
         )
-        trains = json.loads(response.content)
+        content_val = response.content
+        if isinstance(content_val, list):
+            content_val = " ".join(item.get("text", "") for item in content_val if isinstance(item, dict) and "text" in item)
+        parsed = json.loads(str(content_val).strip())
+        trains = parsed.get("trains", []) if isinstance(parsed, dict) else parsed
         if not isinstance(trains, list):
             trains = []
     except (json.JSONDecodeError, Exception) as exc:
