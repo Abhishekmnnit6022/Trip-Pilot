@@ -93,6 +93,12 @@ app.add_middleware(
 # ── Register additional routers ──────────────────────────────────────────────
 app.include_router(profile_booking_router)
 
+@app.get("/")
+@app.head("/")
+def read_root():
+    """Root health check (required by Render port detection)."""
+    return {"status": "ok", "app": "TripPilot API"}
+
 
 # ── Request / Response models ────────────────────────────────────────────────
 

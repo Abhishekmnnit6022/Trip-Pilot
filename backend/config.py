@@ -15,7 +15,7 @@ _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(_env_path)
 
 # ── API Keys ─────────────────────────────────────────────────────────────────
-LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini").strip().lower()
+LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "groq").strip().lower()
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "").strip()
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip()
 OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "").strip()
@@ -40,7 +40,7 @@ STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", "").strip()
 
 # ── LLM ──────────────────────────────────────────────────────────────────────
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip()
-LLM_MODEL: str = "gemini-3.6-flash"
+LLM_MODEL: str = os.getenv("LLM_MODEL", "qwen/qwen3.8-27b").strip()
 
 # ── Frontend ─────────────────────────────────────────────────────────────────
 FRONTEND_URL: str = os.getenv("FRONTEND_URL", "").strip()

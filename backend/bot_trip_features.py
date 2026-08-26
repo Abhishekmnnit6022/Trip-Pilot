@@ -18,7 +18,7 @@ from langchain_core.messages import HumanMessage
 bot_session = requests.Session()
 
 def _get_llm():
-    return ChatGroq(model="llama-3.1-8b-instant", temperature=0.2)
+    return ChatGroq(model="qwen/qwen3.8-27b", temperature=0.2)
 
 def get_booked_trips_for_bot(user_id: str) -> list[dict]:
     """Fetch ONLY active trips that have bookings, renaming them dynamically."""
