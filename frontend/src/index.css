@@ -158,7 +158,44 @@ a:hover { text-decoration: underline; }
    ═══════════════════════════════════════════════════════════════════════════ */
 .landing {
   min-height: 100vh;
-  background: radial-gradient(ellipse at top center, #0c1929 0%, var(--bg-primary) 50%);
+  background: var(--bg-primary);
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Animated floating orbs background */
+.landing::before {
+  content: '';
+  position: fixed;
+  top: -30%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 900px;
+  height: 900px;
+  background: radial-gradient(circle, rgba(59,130,246,0.07) 0%, transparent 65%);
+  animation: orb-drift1 14s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+.landing::after {
+  content: '';
+  position: fixed;
+  bottom: -20%;
+  right: -15%;
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, rgba(6,182,212,0.05) 0%, transparent 65%);
+  animation: orb-drift2 18s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes orb-drift1 {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-52%) translateY(40px); }
+}
+@keyframes orb-drift2 {
+  0%, 100% { transform: translateX(0) translateY(0); }
+  50% { transform: translateX(-30px) translateY(-40px); }
 }
 
 /* Hero */
@@ -281,9 +318,9 @@ a:hover { text-decoration: underline; }
   display: flex; align-items: center; gap: 12px; margin-bottom: 1.5rem;
 }
 .sidebar-logo-img { 
-  width: 140px; height: auto; 
-  object-fit: contain; 
-  filter: invert(1) hue-rotate(180deg) brightness(1.5) drop-shadow(0 0 8px var(--accent-glow));
+  width: 160px;
+  height: auto; 
+  object-fit: contain;
 }
 /* Hide the text "TripPilot" since it's already in the wide logo */
 .sidebar-header h2 { display: none; }
@@ -1544,6 +1581,7 @@ h1, h2, h3, h4, h5, h6 {
 .landing {
   background: var(--bg-primary) !important;
 }
+.landing > * { position: relative; z-index: 1; }
 
 .hero-glow { display: none !important; }
 
@@ -1874,3 +1912,461 @@ h1, h2, h3, h4, h5, h6 {
     transform: scale(1.1);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ITINERARY CARD — PREMIUM REDESIGN
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* Wrapper for all days in the chat bubble */
+.itinerary-rich-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 860px;
+  margin: 0.5rem 0;
+}
+
+/* ── One day block ─────────────────────────────────────────────────────── */
+.itin-day-wrap {
+  background: linear-gradient(145deg, rgba(15,15,15,0.95), rgba(25,25,25,0.92));
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px;
+  padding: 1.5rem 1.5rem 1.25rem;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.5),
+    0 0 0 1px rgba(255,255,255,0.04),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+  backdrop-filter: blur(20px);
+  position: relative;
+  overflow: hidden;
+}
+
+.itin-day-wrap::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(59,130,246,0.6), transparent);
+}
+
+/* ── Day header ────────────────────────────────────────────────────────── */
+.itin-day-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.itin-day-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 100px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+}
+
+.itin-day-title-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.itin-day-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.itin-day-theme {
+  font-size: 0.78rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  font-weight: 600;
+  margin: 2px 0 0;
+}
+
+.itin-day-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 4px 10px;
+  border-radius: 100px;
+  flex-shrink: 0;
+}
+
+/* ── Scroll zone (cards + buttons) ────────────────────────────────────── */
+.itin-scroll-zone {
+  position: relative;
+}
+
+.itin-cards-track {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding: 6px 2px 14px;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Custom scrollbar */
+.itin-cards-track::-webkit-scrollbar { height: 4px; }
+.itin-cards-track::-webkit-scrollbar-track { background: transparent; }
+.itin-cards-track::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 10px;
+}
+.itin-cards-track::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+/* ── Scroll arrow buttons ──────────────────────────────────────────────── */
+.itin-scroll-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-60%);
+  z-index: 10;
+  background: rgba(11,17,33,0.9);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--text-primary);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  transition: background 0.2s, border-color 0.2s;
+}
+.itin-scroll-btn:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.2);
+}
+.itin-scroll-left { left: -14px; }
+.itin-scroll-right { right: -14px; }
+
+/* ── Individual place card ─────────────────────────────────────────────── */
+.itin-place-card {
+  flex-shrink: 0;
+  width: 300px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(20,20,20,0.7);
+  border: 1px solid rgba(255,255,255,0.07);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  position: relative;
+  transition: box-shadow 0.3s ease;
+}
+
+.itin-place-card:hover {
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.15);
+}
+
+/* ── Image area ────────────────────────────────────────────────────────── */
+.itin-img-wrap {
+  position: relative;
+  width: 100%;
+  height: 185px;
+  overflow: hidden;
+  background: rgba(15,15,15,0.9);
+}
+
+.itin-img-skeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.03) 25%,
+    rgba(255,255,255,0.07) 50%,
+    rgba(255,255,255,0.03) 75%);
+  background-size: 200% 100%;
+  animation: itin-shimmer 1.5s infinite;
+}
+
+@keyframes itin-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.itin-img-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 40%,
+    rgba(11,17,33,0.85) 100%
+  );
+  pointer-events: none;
+}
+
+/* ── Badges on image ───────────────────────────────────────────────────── */
+.itin-rating-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(245,158,11,0.3);
+  color: #fbbf24;
+  padding: 4px 9px;
+  border-radius: 100px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.itin-stop-num {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+/* ── Card body ─────────────────────────────────────────────────────────── */
+.itin-card-body {
+  padding: 1.1rem 1.1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  flex: 1;
+}
+
+.itin-place-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.itin-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.itin-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.07);
+  padding: 3px 9px;
+  border-radius: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.itin-cost-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #10b981;
+  background: rgba(16,185,129,0.1);
+  border: 1px solid rgba(16,185,129,0.2);
+  padding: 3px 9px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+
+.itin-cost-chip.itin-cost-free {
+  color: #06b6d4;
+  background: rgba(6,182,212,0.1);
+  border-color: rgba(6,182,212,0.2);
+}
+
+.itin-place-desc {
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Hover glow overlay ────────────────────────────────────────────────── */
+.itin-card-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .itin-day-wrap {
+    padding: 1.1rem 1rem 1rem;
+    border-radius: 16px;
+  }
+  .itin-place-card { width: 260px; }
+  .itin-img-wrap { height: 155px; }
+  .itin-day-title { font-size: 1.1rem; }
+  .itin-scroll-left { left: -8px; }
+  .itin-scroll-right { right: -8px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FINAL PLAN CARD — Premium sectioned trip summary
+═══════════════════════════════════════════════════════════════════════════ */
+
+.fp-card {
+  width: 100%;
+  max-width: 820px;
+  background: linear-gradient(145deg, rgba(15,15,15,0.97), rgba(25,25,25,0.95));
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow:
+    0 12px 40px rgba(0,0,0,0.5),
+    0 0 0 1px rgba(255,255,255,0.05);
+  margin: 0.5rem 0;
+}
+
+.fp-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.4rem 1.5rem;
+  background: linear-gradient(90deg, rgba(255,255,255,0.04), transparent);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.fp-header-icon {
+  font-size: 2rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.fp-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.fp-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 2px 0 0;
+}
+
+.fp-sections {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0;
+}
+
+.fp-section {
+  border-left: 3px solid transparent;
+  margin: 0 1rem;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 0.4rem;
+  transition: background 0.2s;
+}
+
+.fp-section:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.fp-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.fp-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.fp-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.fp-section-body {
+  padding: 0 1rem 1rem 3.4rem;
+  overflow: hidden;
+}
+
+/* Markdown inside FinalPlanCard */
+.fp-markdown { font-size: 0.88rem; line-height: 1.65; color: var(--text-secondary); }
+.fp-markdown h1, .fp-markdown h2 { display: none; }
+.fp-markdown h3 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0.8rem 0 0.4rem;
+}
+.fp-markdown p { margin: 0.3rem 0; }
+.fp-markdown ul { padding-left: 1.25rem; margin: 0.3rem 0; }
+.fp-markdown li { margin: 0.25rem 0; color: var(--text-secondary); }
+.fp-markdown li::marker { color: var(--accent); }
+.fp-markdown strong { color: var(--text-primary); font-weight: 600; }
+.fp-markdown em { color: var(--text-muted); }
+.fp-markdown ol { padding-left: 1.25rem; }
+
+/* Markdown Tables */
+.fp-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.85rem;
+}
+.fp-markdown th, .fp-markdown td {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.fp-markdown th {
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+

@@ -25,7 +25,7 @@ export default function LandingPage() {
       <nav className="landing-nav">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {/* Added brightness(0) invert(1) for the dark theme to make the logo pure white */}
-          <img src="/logo.png" alt="TripPilot" style={{ height: '56px', filter: 'brightness(0) invert(1)' }} />
+          <img src="/logo.png?v=2" alt="TripPilot" style={{ height: '56px' }} />
         </div>
         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
           <button style={{ background: 'transparent', border: 'none', fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer', transition: 'color 0.2s' }} onMouseOver={e => e.target.style.color='var(--text-primary)'} onMouseOut={e => e.target.style.color='var(--text-secondary)'} onClick={() => navigate('/auth')}>Log in</button>
@@ -71,10 +71,28 @@ export default function LandingPage() {
 
         {/* Hero Image Masonry Grid */}
         <motion.div className="hero-grid" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.8, delay: 0.2 }}>
-          <img src={DESTINATIONS[0].img} alt="Travel" style={{ width: '100%', height: '400px', objectFit: 'cover', borderRadius: '24px', marginTop: '40px', border: '1px solid var(--border)' }} />
+          <motion.img 
+            src={DESTINATIONS[0].img} 
+            alt="Travel" 
+            style={{ width: '100%', height: '400px', objectFit: 'cover', borderRadius: '24px', marginTop: '40px', border: '1px solid var(--border)' }} 
+            animate={{ y: [0, -10, 0] }}
+            transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+          />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <img src={DESTINATIONS[1].img} alt="Travel" style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '24px', border: '1px solid var(--border)' }} />
-            <img src={DESTINATIONS[2].img} alt="Travel" style={{ width: '100%', height: '300px', objectFit: 'cover', borderRadius: '24px', border: '1px solid var(--border)' }} />
+            <motion.img 
+              src={DESTINATIONS[1].img} 
+              alt="Travel" 
+              style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '24px', border: '1px solid var(--border)' }} 
+              animate={{ y: [0, 8, 0] }}
+              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+            />
+            <motion.img 
+              src={DESTINATIONS[2].img} 
+              alt="Travel" 
+              style={{ width: '100%', height: '300px', objectFit: 'cover', borderRadius: '24px', border: '1px solid var(--border)' }} 
+              animate={{ y: [0, -8, 0] }}
+              transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+            />
           </div>
         </motion.div>
       </section>
@@ -113,7 +131,7 @@ export default function LandingPage() {
         <div className="footer-grid">
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <img src="/logo.png" alt="TripPilot" style={{ height: '48px', width: 'fit-content', filter: 'brightness(0) invert(1)' }} />
+            <img src="/logo.png?v=2" alt="TripPilot" style={{ height: '48px', width: 'fit-content' }} />
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.6, maxWidth: '300px' }}>
               The premium AI travel concierge. We handle the routing, booking, and expenses so you can focus on the journey.
             </p>

@@ -19,6 +19,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, API_URL } from '../lib/supabase';
 import { FlightCard, TrainCard, HotelCard } from '../components/ResultCards';
+import ItineraryCard from '../components/ItineraryCard';
+import FinalPlanCard from '../components/FinalPlanCard';
 import ProfileModal from '../components/ProfileModal';
 import BookingModal from '../components/BookingModal';
 import TravelWidget from '../components/TravelWidget';
@@ -289,7 +291,6 @@ export default function ChatPage() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
-          // Generate smart trip name from the user's first message
           const words = text.trim().split(/\s+/).slice(0, 5).join(' ');
           const tripName = words.length > 3 ? words : `Trip — ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 
@@ -305,10 +306,11 @@ export default function ChatPage() {
             const tripData = await tripResp.json();
             setActiveTripId(tripData.id);
             activeTripIdRef = tripData.id;
+            console.log('[TripPilot] 🗂️ New trip created:', tripData.id, '—', tripName);
           }
         }
       } catch (err) {
-        console.error('Failed to create trip:', err);
+        console.error('[TripPilot] ❌ Failed to create trip:', err);
       }
     }
 
@@ -326,8 +328,11 @@ export default function ChatPage() {
       });
 
       if (!response.ok) {
+        console.error('[TripPilot] ❌ Chat API error:', response.status, response.statusText);
         throw new Error(`API error: ${response.status}`);
       }
+
+      console.log('[TripPilot] 🌐 SSE stream opened. thread_id:', threadId);
 
       /* ── Parse SSE stream ────────────────────────────────────────────── */
       const reader = response.body.getReader();
@@ -342,43 +347,71 @@ export default function ChatPage() {
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
-        for (const line of lines) {
-          if (line.startsWith('event:')) continue;
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
           if (!line.startsWith('data:')) continue;
 
           const rawData = line.replace('data:', '').trim();
           if (!rawData) continue;
 
+          // Look back for the event: prefix on the preceding line
+          const eventLine = lines[i - 1] || '';
+          const eventType = eventLine.startsWith('event:') ? eventLine.replace('event:', '').trim() : '';
+
           try {
             const data = JSON.parse(rawData);
 
-            if (data.agent && !data.type && !data.content) {
+            if (eventType === 'itinerary' || (data.content && !data.agent && !data.thread_id)) {
+              // Itinerary JSON content
+              console.log('[TripPilot] 🗺️ Itinerary received. Parsing JSON...');
+              try { JSON.parse(data.content); console.log('[TripPilot] ✅ Itinerary JSON valid.'); }
+              catch { console.warn('[TripPilot] ⚠️ Itinerary content is NOT valid JSON — will fallback to markdown.'); }
+              setActiveAgent(null);
+              setMessages((prev) => [...prev, {
+                role: 'itinerary',
+                content: data.content,
+              }]);
+            } else if (data.agent && !data.type && !data.content) {
               // Agent started executing
+              console.log(`[TripPilot] 🤖 Agent started: ${data.agent}`);
               setActiveAgent(data.agent);
             } else if (data.type && data.data) {
               // Structured results (flights / trains / hotels)
+              console.log(`[TripPilot] 📊 Results received: type=${data.type}, count=${data.data?.length}`);
               setActiveAgent(null);
               setMessages((prev) => [...prev, {
                 role: 'results',
                 resultType: data.type,
                 data: data.data,
               }]);
+              
+              if (data.data && data.data.length > 0) {
+                 const firstItem = data.data[0];
+                 let payload = null;
+                 if (data.type === 'flights') {
+                    payload = { bookingType: 'flight', providerName: firstItem.airline, travelDate: firstItem.travel_date || (firstItem.departure_time ? firstItem.departure_time.split('T')[0] : ''), details: firstItem };
+                 } else if (data.type === 'trains') {
+                    payload = { bookingType: 'train', providerName: firstItem.train_name, travelDate: firstItem.travel_date || '', details: firstItem };
+                 } else if (data.type === 'hotels') {
+                    payload = { bookingType: 'hotel', providerName: firstItem.name, travelDate: firstItem.checkin || '', details: firstItem };
+                 }
+                 if (payload) {
+                    console.log('[TripPilot] 💳 Auto-opening BookingModal in 800ms for:', payload.bookingType, payload.providerName);
+                    setTimeout(() => setBookingModal({ open: true, data: payload }), 800);
+                 }
+              }
             } else if (data.content && data.agent) {
               // AI text message
+              console.log(`[TripPilot] 💬 Message from ${data.agent} (${data.content.length} chars)`);
               setActiveAgent(null);
               setMessages((prev) => [...prev, {
                 role: 'assistant',
                 content: data.content,
                 agent: data.agent,
               }]);
-            } else if (data.content && !data.agent) {
-              // Itinerary content
-              setMessages((prev) => [...prev, {
-                role: 'itinerary',
-                content: data.content,
-              }]);
             } else if (data.thread_id !== undefined && data.destination) {
               // State snapshot
+              console.log('[TripPilot] 📍 State snapshot — origin:', data.origin, '→ dest:', data.destination);
               if (activeTripIdRef || activeTripId) {
                 const tId = activeTripIdRef || activeTripId;
                 const dest = data.destination.charAt(0).toUpperCase() + data.destination.slice(1);
@@ -395,21 +428,23 @@ export default function ChatPage() {
                 }).catch(() => {});
               }
             }
-          } catch {
-            // Skip malformed JSON chunks
+          } catch (parseErr) {
+            console.warn('[TripPilot] ⚠️ Skipped malformed SSE chunk:', rawData?.slice(0, 80));
           }
         }
       }
     } catch (err) {
+      console.error('[TripPilot] ❌ Stream error:', err.message);
       setMessages((prev) => [...prev, {
         role: 'assistant',
         content: `❌ Error: ${err.message}. Please try again.`,
       }]);
     } finally {
+      console.log('[TripPilot] ✅ Stream complete.');
       setIsLoading(false);
       setActiveAgent(null);
-      fetchBookings(); // Refresh bookings sidebar after chat completes
-      fetchChatSessions(); // Refresh chat history sidebar
+      fetchBookings();
+      fetchChatSessions();
     }
   }, [isLoading, threadId, navigate, fetchBookings, fetchChatSessions]);
 
@@ -436,7 +471,7 @@ export default function ChatPage() {
       {/* ═══════════════════ SIDEBAR ═══════════════════════════════════════ */}
       <aside className={`chat-sidebar ${isMobileSidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <img src="/logo.png" alt="TripPilot" className="sidebar-logo-img" />
+          <img src="/logo.png?v=2" alt="TripPilot" className="sidebar-logo-img" />
           <h2>TripPilot</h2>
           <button 
             className="mobile-sidebar-close" 
@@ -590,7 +625,7 @@ export default function ChatPage() {
           <button className="mobile-menu-btn" onClick={() => setIsMobileSidebarOpen(true)}>
             <Menu size={24} color="var(--text-primary)" />
           </button>
-          <img src="/logo.png" alt="TripPilot" style={{ height: '32px', filter: 'invert(1) hue-rotate(180deg) brightness(1.5)' }} />
+          <img src="/logo.png?v=2" alt="TripPilot" style={{ height: '24px' }} />
           <div style={{ width: 24 }} /> {/* spacer */}
         </div>
 
@@ -605,7 +640,7 @@ export default function ChatPage() {
                 transition={{ duration: 0.5 }}
               >
                 <div className="welcome-logo">
-                  <img src="/logo.png" alt="TripPilot" style={{ width: '220px', height: 'auto' }} />
+                  <img src="/logo.png?v=2" alt="TripPilot" style={{ width: '180px', height: 'auto' }} />
                 </div>
                 <h2>Where would you like to go? 🌍</h2>
                 <p>Describe your dream trip and I'll handle the rest — flights, trains, hotels, and a complete itinerary.</p>
@@ -640,21 +675,41 @@ export default function ChatPage() {
 
                 {/* AI text bubble */}
                 {msg.role === 'assistant' && (
+                  msg.agent === 'final_agent' ? (
+                    <FinalPlanCard content={msg.content} />
+                  ) : (
                   <div className="message-bubble ai-bubble">
                     <Bot size={16} />
                     <div className="markdown-content">
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
                     </div>
                   </div>
+                  )
                 )}
 
                 {/* Itinerary bubble */}
                 {msg.role === 'itinerary' && (
-                  <div className="message-bubble ai-bubble itinerary-bubble">
-                    <Map size={16} />
-                    <div className="markdown-content">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
-                    </div>
+                  <div className="itinerary-rich-wrapper">
+                    {(() => {
+                      try {
+                        const parsed = JSON.parse(msg.content);
+                        if (parsed && parsed.days) {
+                          return parsed.days.map((day, dIdx) => (
+                            <ItineraryCard key={dIdx} day={day} dayIndex={dIdx} />
+                          ));
+                        }
+                      } catch (err) {
+                        // Fallback to markdown if not valid JSON
+                        return (
+                          <div className="message-bubble ai-bubble itinerary-bubble">
+                            <Map size={16} />
+                            <div className="markdown-content">
+                              <ReactMarkdown>{msg.content}</ReactMarkdown>
+                            </div>
+                          </div>
+                        );
+                      }
+                    })()}
                   </div>
                 )}
 
@@ -750,7 +805,12 @@ export default function ChatPage() {
         isOpen={bookingModal.open}
         onClose={() => setBookingModal({ open: false, data: null })}
         bookingData={bookingModal.data}
-        onBooked={() => fetchBookings()}
+        onBooked={(bookingData) => {
+          fetchBookings();
+          setBookingModal({ open: false, data: null });
+          // Automatically tell the agent we have paid so it can proceed
+          sendMessage(`Payment completed successfully for ${bookingData?.provider_name || 'booking'}! PNR is ${bookingData?.pnr_or_confirmation_number}. Please proceed to the next step.`);
+        }}
         tripId={activeTripId}
       />
       {/* QR Onboarding Modal */}

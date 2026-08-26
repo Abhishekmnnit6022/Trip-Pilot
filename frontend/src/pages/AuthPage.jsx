@@ -57,7 +57,7 @@ export default function AuthPage() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-header">
-          <img src="/logo.png" alt="TripPilot Logo" className="auth-logo-img" style={{ width: '220px', height: 'auto', objectFit: 'contain', margin: '0 auto 1.5rem', display: 'block', filter: 'brightness(0) invert(1)' }} />
+          <img src="/logo.png?v=2" alt="TripPilot Logo" className="auth-logo-img" style={{ width: '220px', height: 'auto', objectFit: 'contain', margin: '0 auto 1.5rem', display: 'block' }} />
           <h1>{isLogin ? 'Welcome Back' : 'Create Account'}</h1>
           <p>{isLogin ? 'Sign in to plan your next adventure' : 'Start planning amazing trips'}</p>
         </div>

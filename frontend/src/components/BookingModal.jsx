@@ -1,16 +1,19 @@
 /**
  * BookingModal.jsx — 3-Step Booking Wizard
  *
- * A premium modal that guides users through:
+ * A premium modal that guides users through manual payment execution:
  *   Step 1 (Review)   → Pre-filled traveler info + trip details
  *   Step 2 (Payment)  → Simulated payment with UPI / Card selector
  *   Step 3 (Confirmed) → Animated success with PNR display
+ *
+ * This component intercepts the AI's guided flow. Once payment is successful,
+ * `onBooked` fires and signals the AI to resume the itinerary generation.
  *
  * Props:
  *   @param {boolean}  isOpen       - Controls modal visibility
  *   @param {Function} onClose      - Callback to close the modal
  *   @param {Object}   bookingData  - { bookingType, providerName, travelDate, details }
- *   @param {Function} onBooked     - Callback after successful booking; receives the booking response
+ *   @param {Function} onBooked     - Callback after successful payment; passes data back to chat
  */
 
 import { useState, useEffect } from 'react';
