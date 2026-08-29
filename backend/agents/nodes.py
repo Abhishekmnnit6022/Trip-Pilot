@@ -168,7 +168,7 @@ def router_agent(state: TravelState) -> dict:
                  parsed.get('transport_preference'))
     except json.JSONDecodeError:
         raw_text = extract_text(response.content)
-        log.warning("[ROUTER] LLM did not return valid JSON — inferring action from state")
+        log.warning("[ROUTER] LLM did not return valid JSON — inferring action from state. Raw output: %s", raw_text[:300])
 
         # --- Smart fallback: infer action from current state ---
         # If the user replied with a train tier and we know origin/dest/date, proceed with booking
@@ -203,20 +203,21 @@ def router_agent(state: TravelState) -> dict:
         }
 
     # Update state with any newly extracted info
+    # Always apply LLM-extracted values when present (overwrite stale state)
     updates: dict = {"llm_calls": llm_calls}
 
-    if parsed.get("origin") and not origin:
+    if parsed.get("origin"):
         updates["origin"] = parsed["origin"]
-    if parsed.get("destination") and not destination:
+    if parsed.get("destination"):
         updates["destination"] = parsed["destination"]
-    if parsed.get("start_date") and not start_date:
+    if parsed.get("start_date"):
         updates["start_date"] = parsed["start_date"]
-    if parsed.get("end_date") and not end_date:
+    if parsed.get("end_date"):
         updates["end_date"] = parsed["end_date"]
-    if parsed.get("num_days") and not num_days:
+    if parsed.get("num_days"):
         updates["num_days"] = parsed["num_days"]
-        # Auto-compute end_date if we have start_date + num_days
-        if updates.get("start_date") or start_date:
+        # Auto-compute end_date if we have start_date + num_days but no end_date
+        if (updates.get("start_date") or start_date) and not parsed.get("end_date"):
             try:
                 sd = datetime.strptime(
                     updates.get("start_date", start_date), "%Y-%m-%d"
@@ -226,11 +227,11 @@ def router_agent(state: TravelState) -> dict:
                 ).strftime("%Y-%m-%d")
             except ValueError:
                 pass
-    if parsed.get("budget") and not budget:
+    if parsed.get("budget"):
         updates["budget"] = parsed["budget"]
-    if parsed.get("transport_preference") and not transport_preference:
+    if parsed.get("transport_preference"):
         updates["transport_preference"] = parsed["transport_preference"]
-    if parsed.get("train_tier") and not train_tier:
+    if parsed.get("train_tier"):
         updates["train_tier"] = parsed["train_tier"]
 
     # Handle manual payment completion

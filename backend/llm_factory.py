@@ -27,9 +27,10 @@ def get_llm(model_override: str = None):
 
     if provider == "groq":
         from langchain_groq import ChatGroq
-        model = model_override or "qwen/qwen3.8-27b"
+        # Use a fast, instruction-tuned model that reliably returns JSON without think blocks
+        model = model_override or "llama-3.1-8b-instant"
         log.info("Initializing LLM with Groq (Model: %s)", model)
-        return ChatGroq(model=model, api_key=GROQ_API_KEY)
+        return ChatGroq(model=model, api_key=GROQ_API_KEY, temperature=0)
         
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
