@@ -20,6 +20,7 @@ import requests
 from backend.config import (
     LLM_PROVIDER, GEMINI_API_KEY, GROQ_API_KEY,
     OPENROUTER_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY,
+    CEREBRAS_API_KEY,
 )
 
 log = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ _GROQ_PRIORITY = [
 # Only providers with a non-empty API key are attempted.
 _FALLBACK_CHAIN = [
     "groq",
+    "cerebras",   # ~2000 tok/s — fastest free inference available
     "gemini",
     "openrouter",
 ]
@@ -119,6 +121,21 @@ def _make_openrouter(model_override=None):
     )
 
 
+def _make_cerebras(model_override=None):
+    if not CEREBRAS_API_KEY:
+        raise ValueError("CEREBRAS_API_KEY not set")
+    from langchain_openai import ChatOpenAI
+    # Cerebras Cloud is OpenAI-compatible. llama-3.3-70b runs at ~2000 tok/s.
+    model = model_override or "llama-3.3-70b"
+    log.info("[LLMFactory] Cerebras → %s", model)
+    return ChatOpenAI(
+        model=model,
+        api_key=CEREBRAS_API_KEY,
+        base_url="https://api.cerebras.ai/v1",
+        temperature=0,
+    )
+
+
 def _make_openai(model_override=None):
     if not OPENAI_API_KEY or OPENAI_API_KEY == "your_openai_api_key_here":
         raise ValueError("OPENAI_API_KEY not set")
@@ -146,6 +163,7 @@ def _make_ollama(model_override=None):
 
 _PROVIDER_MAP = {
     "groq":       _make_groq,
+    "cerebras":   _make_cerebras,
     "gemini":     _make_gemini,
     "openrouter": _make_openrouter,
     "openai":     _make_openai,
