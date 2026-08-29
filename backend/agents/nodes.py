@@ -25,7 +25,7 @@ from backend.tools.train_tool import search_trains_structured, format_trains_tex
 from backend.tools.hotel_tool import search_hotels_structured, format_hotels_text
 from backend.tools.tavily_tool import search_attractions
 from backend.tools.weather_tool import get_weather_forecast
-from backend.llm_factory import get_llm
+from backend.llm_factory import get_llm, get_active_llm_info
 
 log = logging.getLogger(__name__)
 
@@ -102,7 +102,13 @@ Rules (follow IN ORDER):
 20. CRITICAL: If the user message says "Payment completed successfully", determine if it was for transport or hotel. If it was transport, set `paid_transport` to true. If hotel, set `paid_hotel` to true. Acknowledge the payment and move to the next phase (ask_hotel or generate_itinerary).
 21. For general questions / chit-chat → action = "respond"
 
-Respond with ONLY valid JSON (no markdown):
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ OUTPUT FORMAT: RETURN ONLY VALID JSON. NO prose, NO markdown,  │
+│ NO explanation. Your ENTIRE response must be a single JSON object │
+│ starting with {{ and ending with }}. Any other format will break   │
+│ the system. The "response" field carries your user-facing message. │
+└────────────────────────────────────────────────────────────────────────────────┘
+
 {{
   "origin": "<city or null>",
   "destination": "<city or null>",
@@ -152,12 +158,30 @@ def router_agent(state: TravelState) -> dict:
     )
 
     messages_for_llm = [SystemMessage(content=system_prompt)]
-    # Include the last few messages for context (limit to avoid token overflow)
-    recent = state.get("messages", [])[-10:]
+    # Include the last few messages for context (limit to 6 to reduce confusion)
+    recent = state.get("messages", [])[-6:]
     messages_for_llm.extend(recent)
+    # Layer 2: inject a hard JSON reminder as the very last message so the
+    # model sees it immediately before generating its response.
+    messages_for_llm.append(
+        HumanMessage(content=(
+            "[INSTRUCTION] Your response MUST be a single valid JSON object only. "
+            "Start with {{ and end with }}. Do NOT write any prose, greeting, or explanation "
+            "outside the JSON. Put your user-facing message inside the \"response\" field."
+        ))
+    )
 
-    response = llm.invoke(messages_for_llm)
+    # Layer 3: response_format=json_object forces the API to validate JSON output.
+    # Falls back to plain invoke if the provider doesn't support it.
+    try:
+        json_llm = llm.bind(response_format={"type": "json_object"})
+        response = json_llm.invoke(messages_for_llm)
+    except Exception:
+        response = llm.invoke(messages_for_llm)
+
+    active_llm = get_active_llm_info()
     llm_calls = state.get("llm_calls", 0) + 1
+    log.info("[ROUTER] 🤖 LLM responding: %s", active_llm)
 
     # Parse the JSON response
     try:

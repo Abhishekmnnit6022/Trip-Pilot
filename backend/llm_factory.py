@@ -48,6 +48,14 @@ _FALLBACK_CHAIN = [
 # Cache resolved Groq model for the process lifetime
 _groq_model_cache: str | None = None
 
+# Track which provider+model is currently active (for logging)
+_active_provider: str = "unknown"
+_active_model: str = "unknown"
+
+def get_active_llm_info() -> str:
+    """Returns a human-readable string of the active LLM for use in logs."""
+    return f"{_active_provider} / {_active_model}"
+
 
 # ── Groq: auto-detect best available model ────────────────────────────────────
 
@@ -90,29 +98,35 @@ def _resolve_groq_model() -> str:
 # ── Individual provider constructors ─────────────────────────────────────────
 
 def _make_groq(model_override=None):
+    global _active_provider, _active_model
     if not GROQ_API_KEY:
         raise ValueError("GROQ_API_KEY not set")
     from langchain_groq import ChatGroq
     model = model_override or _resolve_groq_model()
-    log.info("[LLMFactory] Groq → %s", model)
+    _active_provider, _active_model = "groq", model
+    log.info("[LLMFactory] 🤖 ACTIVE LLM → Groq / %s", model)
     return ChatGroq(model=model, api_key=GROQ_API_KEY, temperature=0)
 
 
 def _make_gemini(model_override=None):
+    global _active_provider, _active_model
     if not GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY not set")
     from langchain_google_genai import ChatGoogleGenerativeAI
     model = model_override or "gemini-1.5-flash"
-    log.info("[LLMFactory] Gemini → %s", model)
+    _active_provider, _active_model = "gemini", model
+    log.info("[LLMFactory] 🤖 ACTIVE LLM → Gemini / %s", model)
     return ChatGoogleGenerativeAI(model=model, google_api_key=GEMINI_API_KEY, temperature=0)
 
 
 def _make_openrouter(model_override=None):
+    global _active_provider, _active_model
     if not OPENROUTER_API_KEY:
         raise ValueError("OPENROUTER_API_KEY not set")
     from langchain_openai import ChatOpenAI
     model = model_override or "meta-llama/llama-3.1-8b-instruct:free"
-    log.info("[LLMFactory] OpenRouter → %s", model)
+    _active_provider, _active_model = "openrouter", model
+    log.info("[LLMFactory] 🤖 ACTIVE LLM → OpenRouter / %s", model)
     return ChatOpenAI(
         model=model,
         api_key=OPENROUTER_API_KEY,
@@ -122,12 +136,14 @@ def _make_openrouter(model_override=None):
 
 
 def _make_cerebras(model_override=None):
+    global _active_provider, _active_model
     if not CEREBRAS_API_KEY:
         raise ValueError("CEREBRAS_API_KEY not set")
     from langchain_openai import ChatOpenAI
     # Cerebras Cloud is OpenAI-compatible. llama-3.3-70b runs at ~2000 tok/s.
     model = model_override or "llama-3.3-70b"
-    log.info("[LLMFactory] Cerebras → %s", model)
+    _active_provider, _active_model = "cerebras", model
+    log.info("[LLMFactory] 🤖 ACTIVE LLM → Cerebras / %s", model)
     return ChatOpenAI(
         model=model,
         api_key=CEREBRAS_API_KEY,
