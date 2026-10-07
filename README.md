@@ -168,7 +168,15 @@ Trip-Pilot/
 │   ├── supabase_migrations.sql   # Full DB schema, RLS policies, SECURITY DEFINER RPCs
 │   ├── requirements.txt
 │   ├── agents/
-│   │   ├── nodes.py              # All LangGraph agent logic and LLM prompts
+│   │   ├── nodes/                # Modular agent node package
+│   │   │   ├── __init__.py       # Re-exports all public symbols (no breaking changes)
+│   │   │   ├── utils.py          # Shared helpers: extract_text, clean_llm_json, booking utils
+│   │   │   ├── router_node.py    # Router agent — intent extraction & pipeline routing
+│   │   │   ├── transport_nodes.py# Flight, train, return, auto-book & alternate agents
+│   │   │   ├── hotel_node.py     # Hotel search & auto-book agents
+│   │   │   ├── itinerary_nodes.py# Day-by-day itinerary & final summary agents
+│   │   │   ├── budget_nodes.py   # Budget check, optimizer & INR parser
+│   │   │   └── results_node.py   # Search results presenter
 │   │   ├── graph.py              # Graph assembly: nodes, edges, cyclic routing
 │   │   └── state.py              # TravelState TypedDict
 │   └── tools/
